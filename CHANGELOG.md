@@ -3,6 +3,38 @@
 Toutes les évolutions notables de CariPrompt sont listées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et la numérotation suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.4.1] — 2026-09-18
+
+### Ajouté
+- **Style par sélection** : couleur, gras et italique applicables à une partie du texte seulement (une couleur par intervenant, par exemple). Les styles suivent le texte quand il est modifié, et sont enregistrés dans les projets.
+- **Préréglages** de réglages d'affichage, enregistrés sous un nom (« iPad CACE »…) et rappelables en un clic.
+- **Zone de dépôt visible** dans la colonne de gauche, qui ouvre aussi la fenêtre d'import au clic.
+- Nouvelle **icône** de l'application.
+
+### Modifié
+- Le rappel des raccourcis passe en bas de la colonne de gauche, repliable. La liste des textes défile au-dessus.
+- L'interligne rejoint le bloc **Mise en page**.
+
+### Corrigé
+- Bouton « Masquer la sortie » dont le texte débordait du cadre.
+
+## [1.4.0] — 2026-09-17
+
+### Ajouté
+- **Typographie** : choix de la police parmi les polices installées, graisse, italique, majuscules.
+- **Couleurs** du texte, du fond et de la ligne de lecture.
+- **Interligne** réglable (1 à 2,5).
+- **Projets `.cariprompt`** : enregistrement et ouverture d'un texte avec tous ses réglages (⌘S / ⌘⇧O, glisser-déposer, double-clic).
+- **Télécommande de présentation** (PowerPoint) : boutons Suivant et Précédent configurables, F5 pour lancer, B ou . pour l'écran noir.
+- Navigation **par paragraphe** (via la télécommande).
+- **Écran noir** (B ou .).
+- **Plein écran** pour une utilisation solo, avec bouton de sortie et touche Échap ; miroir en plein écran réglable.
+- **Timecode** optionnel sur l'écran du speaker : chrono réel de la prise, temps restant, ou les deux.
+
+### Modifié
+- La vitesse s'exprime désormais de **0 à 100** (au lieu des mots par minute). Les textes existants sont convertis automatiquement.
+- Réglages réorganisés : Vitesse, Durée cible, Typographie, Couleurs, Mise en page, Sortie, Télécommande, Commandes.
+
 ## [1.3.1] — 2026-09-16
 
 ### Ajouté
@@ -67,6 +99,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et la nu
 - Décompte de 3 secondes au lancement.
 - Raccourcis : Espace, flèches, +/−, molette.
 
+[1.4.1]: https://github.com/CaribouNathan/CariPrompt/releases/tag/v1.4.1
+[1.4.0]: https://github.com/CaribouNathan/CariPrompt/releases/tag/v1.4.0
 [1.3.1]: https://github.com/CaribouNathan/CariPrompt/releases/tag/v1.3.1
 [1.3.0]: https://github.com/CaribouNathan/CariPrompt/releases/tag/v1.3.0
 [1.2.0]: https://github.com/CaribouNathan/CariPrompt/releases/tag/v1.2.0

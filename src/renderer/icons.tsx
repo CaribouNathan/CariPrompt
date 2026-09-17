@@ -86,3 +86,18 @@ export const IconFast = (p: P) => (
 export const IconMenu = (p: P) => (
   <svg {...base(p)}><path d="M4 7h16M4 12h16M4 17h16" /></svg>
 );
+export const IconFullscreen = (p: P) => (
+  <svg {...base(p)}><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+);
+export const IconExitFullscreen = (p: P) => (
+  <svg {...base(p)}><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></svg>
+);
+export const IconBold = (p: P) => (
+  <svg {...base(p)}><path d="M7 5h6a3.5 3.5 0 0 1 0 7H7Zm0 7h7a3.5 3.5 0 0 1 0 7H7Z" strokeWidth={2} /></svg>
+);
+export const IconItalic = (p: P) => (
+  <svg {...base(p)}><path d="M15 5h-5M14 19H9M13.5 5 10.5 19" /></svg>
+);
+export const IconClear = (p: P) => (
+  <svg {...base(p)}><path d="M7 7h11M10 7l-1.5 10M14 13l5 5M19 13l-5 5" /></svg>
+);

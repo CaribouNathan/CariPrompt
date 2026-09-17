@@ -49,7 +49,7 @@ L'application est **gratuite, open source (licence MIT), sans compte, sans publi
 
 ### Lecture et vitesse
 
-- **Vitesse en mots par minute** : de 40 à 400 mots/min, par paliers de 5.
+- **Vitesse de 0 à 100**, par paliers de 1 (0 = texte arrêté, 35 ≈ débit parlé courant). En interne, 1 point correspond à 4 mots par minute.
 - **Durée estimée** : calculée en direct à partir du nombre de mots et de la vitesse.
 - **Durée cible** : indiquez la durée voulue pour la vidéo (minutes et secondes), la vitesse est calculée automatiquement. Un avertissement s'affiche si la durée demande une vitesse hors plage. Toute modification manuelle de la vitesse désactive la durée cible.
 - **Décompte de 3 secondes** avant chaque lancement (désactivable). Espace pendant le décompte l'annule.
@@ -57,9 +57,28 @@ L'application est **gratuite, open source (licence MIT), sans compte, sans publi
 - **Changement de vitesse et de taille en pleine lecture**, sans saut du texte : la position est conservée.
 - **Défilement fluide**, synchronisé sur le rafraîchissement de l'écran.
 - **Mise en veille de l'écran bloquée** pendant la lecture.
+- **Timecode** optionnel affiché sur l'écran du speaker : chronomètre réel de la prise (pauses exclues, remis à zéro au retour au début), temps restant estimé, ou les deux.
 
-### Affichage
+### Télécommande de présentation
 
+CariPrompt se pilote avec les télécommandes prévues pour PowerPoint (Logitech R400 / R500 / Spotlight, Kensington, Targus…), qui se comportent comme un clavier :
+
+| Bouton | Action |
+|---|---|
+| Suivant (Page suivante) | Au choix, par défaut **lecture / pause** |
+| Précédent (Page précédente) | Au choix, par défaut **reculer de 10 s** |
+| Lancer le diaporama (F5) | Lecture |
+| Écran noir (B ou .) | Écran noir / retour au texte |
+
+Actions disponibles pour Suivant et Précédent : lecture / pause, paragraphe suivant, paragraphe précédent, avancer ou reculer de 10 s, plus vite, moins vite, retour au début, rien.
+
+### Affichage et typographie
+
+- **Style par sélection** : sélectionnez une partie du texte dans l'éditeur et donnez-lui une couleur, du gras ou de l'italique. Pratique pour attribuer **une couleur par intervenant** dans un dialogue. Le reste du texte garde le style général.
+- **Police** au choix parmi toutes les polices installées sur l'ordinateur.
+- **Graisse** (maigre à noir), **italique**, **majuscules**.
+- **Couleurs** du texte, du fond et de la ligne de lecture, avec retour aux couleurs par défaut.
+- **Interligne** réglable de 1 à 2,5.
 - **Miroir** au choix : aucun, horizontal (glace de prompteur classique), vertical ou les deux (rotation à 180°).
 - **Miroir dans l'aperçu** activable séparément, pour que l'opérateur lise le texte à l'endroit.
 - **Aperçu fidèle** : l'aperçu est rendu à la résolution exacte de l'écran de sortie, les retours à la ligne sont donc identiques.
@@ -67,8 +86,9 @@ L'application est **gratuite, open source (licence MIT), sans compte, sans publi
 - **Ligne de lecture** repérée par deux flèches et un bandeau, position verticale réglable, **affichable ou masquable** (sur l'aperçu et l'écran de sortie).
 - **Dégradé** en haut et en bas de l'écran pour garder le regard sur la ligne active.
 
-### Écrans
+### Écrans et plein écran
 
+- **Plein écran** pour une utilisation solo (ordinateur face au speaker) : bouton dans la barre d'outils ou <kbd>⌘</kbd><kbd>⇧</kbd><kbd>F</kbd> / <kbd>Ctrl</kbd><kbd>Maj</kbd><kbd>F</kbd>. Un bouton **Quitter le plein écran** apparaît au mouvement de la souris ; <kbd>Échap</kbd> quitte aussi. Le miroir en plein écran est réglable séparément.
 - Sortie sur **n'importe quel écran connecté**, en plein écran sans bordure.
 - Détection automatique des écrans branchés ou débranchés en cours de session.
 - Si la sortie est placée sur l'écran de la fenêtre opérateur (pour un test), elle ne passe pas au premier plan de force.
@@ -82,6 +102,18 @@ L'application est **gratuite, open source (licence MIT), sans compte, sans publi
 - **Dupliquer, exporter en .txt, supprimer** (clic droit sur un texte). La suppression s'annule depuis le bandeau affiché pendant 6 secondes.
 - **Glisser-déposer** de fichiers n'importe où dans la fenêtre, ou import par le bouton dédié. Chaque fichier devient un nouveau texte : rien n'est écrasé.
 - **Correcteur orthographique** (français et anglais) dans l'éditeur.
+
+### Préréglages et projets
+
+- **Préréglages** : enregistrez l'ensemble des réglages d'affichage sous un nom (« iPad CACE », « Studio 2 »…) et rappelez-les en un clic. Ils ne contiennent pas de texte.
+
+### Projets `.cariprompt`
+
+Un projet enregistre **le texte et tous ses réglages** : vitesse, durée cible, police, graisse, couleurs, taille, interligne, marges, ligne de lecture, miroirs, décompte, timecode et boutons de la télécommande.
+
+- **Enregistrer** : <kbd>⌘</kbd><kbd>S</kbd> / <kbd>Ctrl</kbd><kbd>S</kbd>. **Ouvrir** : <kbd>⌘</kbd><kbd>⇧</kbd><kbd>O</kbd> / <kbd>Ctrl</kbd><kbd>Maj</kbd><kbd>O</kbd>, glisser-déposer, ou double-clic sur le fichier.
+- À l'ouverture, le texte est ajouté à la bibliothèque et les réglages sont appliqués. La langue, l'apparence et l'écran de sortie restent ceux de l'ordinateur utilisé.
+- Le fichier est au format JSON, lisible et modifiable.
 
 ### Interface
 
@@ -109,12 +141,12 @@ Les fichiers sont disponibles dans la page **[Releases](https://github.com/Carib
 
 | Système | Fichier | Remarque |
 |---|---|---|
-| macOS — Apple Silicon (M1 à M4) | `CariPrompt-1.3.1-macOS-AppleSilicon.zip` | macOS 12 ou plus récent |
-| macOS — Intel | `CariPrompt-1.3.1-macOS-Intel.zip` | macOS 12 ou plus récent |
-| Windows 10 / 11 (64 bits) | `CariPrompt-1.3.1-Windows-Setup.exe` | Installeur classique |
-| Windows 10 / 11 (64 bits) | `CariPrompt-1.3.1-Windows-Portable.exe` | Sans installation, se lance directement |
-| Linux x86_64 | `CariPrompt-1.3.1-Linux-x86_64.AppImage` | Toutes distributions |
-| Debian, Ubuntu et dérivés | `CariPrompt-1.3.1-Linux-amd64.deb` | Paquet installable |
+| macOS — Apple Silicon (M1 à M4) | `CariPrompt-1.4.1-macOS-AppleSilicon.zip` | macOS 12 ou plus récent |
+| macOS — Intel | `CariPrompt-1.4.1-macOS-Intel.zip` | macOS 12 ou plus récent |
+| Windows 10 / 11 (64 bits) | `CariPrompt-1.4.1-Windows-Setup.exe` | Installeur classique |
+| Windows 10 / 11 (64 bits) | `CariPrompt-1.4.1-Windows-Portable.exe` | Sans installation, se lance directement |
+| Linux x86_64 | `CariPrompt-1.4.1-Linux-x86_64.AppImage` | Toutes distributions |
+| Debian, Ubuntu et dérivés | `CariPrompt-1.4.1-Linux-amd64.deb` | Paquet installable |
 
 > Pour savoir si votre Mac est Apple Silicon ou Intel : menu  › **À propos de ce Mac**, ligne **Puce** (Apple M…) ou **Processeur** (Intel).
 
@@ -141,7 +173,7 @@ xattr -cr /Applications/CariPrompt.app
 
 ### Windows
 
-1. Lancez `CariPrompt-1.3.1-Windows-Setup.exe` (ou la version portable).
+1. Lancez `CariPrompt-1.4.1-Windows-Setup.exe` (ou la version portable).
 2. **Windows a protégé votre ordinateur** (SmartScreen) s'affiche : cliquez sur **Informations complémentaires**, puis sur **Exécuter quand même**.
 3. L'installeur permet de choisir le dossier d'installation. Un raccourci est créé dans le menu Démarrer et sur le bureau.
 
@@ -150,8 +182,8 @@ xattr -cr /Applications/CariPrompt.app
 **AppImage** :
 
 ```bash
-chmod +x CariPrompt-1.3.1-Linux-x86_64.AppImage
-./CariPrompt-1.3.1-Linux-x86_64.AppImage
+chmod +x CariPrompt-1.4.1-Linux-x86_64.AppImage
+./CariPrompt-1.4.1-Linux-x86_64.AppImage
 ```
 
 Certaines distributions récentes demandent la bibliothèque FUSE 2 (`sudo apt install libfuse2t64` sur Ubuntu 24.04).
@@ -159,7 +191,7 @@ Certaines distributions récentes demandent la bibliothèque FUSE 2 (`sudo apt i
 **Paquet .deb** :
 
 ```bash
-sudo apt install ./CariPrompt-1.3.1-Linux-amd64.deb
+sudo apt install ./CariPrompt-1.4.1-Linux-amd64.deb
 ```
 
 ## Raccourcis
@@ -169,17 +201,23 @@ Les raccourcis du prompteur sont actifs dès que le curseur n'est pas dans une z
 | Touche | Action |
 |---|---|
 | <kbd>Espace</kbd> | Lecture / pause (annule le décompte s'il est en cours) |
-| <kbd>↓</kbd> | Plus vite (+5 mots/min) |
-| <kbd>↑</kbd> | Moins vite (−5 mots/min) |
+| <kbd>↓</kbd> | Plus vite (+1) |
+| <kbd>↑</kbd> | Moins vite (−1) |
 | <kbd>←</kbd> / <kbd>→</kbd> | Reculer / avancer de 10 secondes |
 | <kbd>+</kbd> / <kbd>−</kbd> | Agrandir / réduire le texte, même pendant la lecture |
 | Molette ou trackpad vers le bas / le haut | Plus vite / moins vite |
 | <kbd>Début</kbd> | Retour au début |
-| <kbd>Échap</kbd> | Quitter la zone de saisie |
+| <kbd>B</kbd> ou <kbd>.</kbd> | Écran noir |
+| <kbd>Page suivante</kbd> / <kbd>Page précédente</kbd> | Boutons de la télécommande (actions réglables) |
+| <kbd>F5</kbd> | Lecture |
+| <kbd>Échap</kbd> | Quitter la zone de saisie, ou le plein écran |
 
 | macOS | Windows / Linux | Action |
 |---|---|---|
 | <kbd>⌘</kbd> <kbd>N</kbd> | <kbd>Ctrl</kbd> <kbd>N</kbd> | Nouveau texte |
+| <kbd>⌘</kbd> <kbd>S</kbd> | <kbd>Ctrl</kbd> <kbd>S</kbd> | Enregistrer le projet |
+| <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>O</kbd> | <kbd>Ctrl</kbd> <kbd>Maj</kbd> <kbd>O</kbd> | Ouvrir un projet |
+| <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>F</kbd> | <kbd>Ctrl</kbd> <kbd>Maj</kbd> <kbd>F</kbd> ou <kbd>F11</kbd> | Plein écran |
 | <kbd>⌘</kbd> <kbd>O</kbd> | <kbd>Ctrl</kbd> <kbd>O</kbd> | Importer des fichiers |
 | <kbd>⌘</kbd> <kbd>D</kbd> | <kbd>Ctrl</kbd> <kbd>D</kbd> | Dupliquer le texte |
 | <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>E</kbd> | <kbd>Ctrl</kbd> <kbd>Maj</kbd> <kbd>E</kbd> | Exporter en .txt |
@@ -221,7 +259,9 @@ Le détail est dans le [CHANGELOG](CHANGELOG.md).
 
 | Version | Technologie | Plateformes | Nouveautés principales |
 |---|---|---|---|
-| **1.3.1** | Electron | macOS, Windows, Linux | Ligne de lecture masquable, textes de bienvenue anglais et français, corrections de mise en page et des menus |
+| **1.4.1** | Electron | macOS, Windows, Linux | Style par sélection (couleur par intervenant), préréglages, zone de dépôt, nouvelle icône |
+| 1.4.0 | Electron | macOS, Windows, Linux | Typographie et couleurs, projets `.cariprompt`, télécommande de présentation, interligne, vitesse 0–100, plein écran, timecode |
+| 1.3.1 | Electron | macOS, Windows, Linux | Ligne de lecture masquable, textes de bienvenue anglais et français, corrections de mise en page et des menus |
 | 1.3.0 | Electron | macOS, Windows, Linux | Interface en anglais ou en français, apparence Système / Claire / Sombre, bouton ☰ sous Windows et Linux |
 | 1.2.0 | Electron | macOS, Windows, Linux | Version multiplateforme, icône, numéro de version dans l'interface, binaires prêts à l'emploi |
 | 1.1.0 | SwiftUI | macOS | Suppression des bips système, glisser-déposer de documents, bibliothèque de textes |
@@ -233,6 +273,8 @@ Les versions 1.0 et 1.1 (natives macOS) sont remplacées par la version Electron
 
 - **Application non signée** : avertissement au premier lancement (voir [Installation](#installation--application-non-signée)).
 - **Vitesse uniforme en hauteur** : la vitesse est calculée à partir du nombre moyen de mots par ligne. Une ligne courte passe à la même vitesse qu'une ligne pleine.
+- **Polices** : la liste est lue au premier affichage des réglages (quelques secondes sur un Mac qui contient beaucoup de polices). Une police absente de l'ordinateur qui ouvre un projet est remplacée par la police système.
+- **Timecode restant** : estimation basée sur la vitesse actuelle, il change si la vitesse change.
 - **Trackpad** : l'inertie du trackpad ne peut pas être distinguée d'un geste volontaire. La cadence de changement de vitesse est donc limitée.
 - **Pas de mise à jour automatique** : les nouvelles versions sont à télécharger dans les Releases.
 - **Linux** : seule l'architecture x86_64 est fournie.
@@ -263,7 +305,8 @@ src/
 ├── main/          Processus principal Electron
 │   ├── main.ts        fenêtres opérateur et sortie, écrans, stockage, menus
 │   ├── preload.ts     API exposée à l'interface
-│   └── importer.ts    lecture txt, rtf, doc, docx, odt, html, pdf
+│   ├── importer.ts    lecture txt, rtf, doc, docx, odt, html, pdf
+│   └── fonts.ts       liste des polices installées
 ├── shared/i18n.ts   traductions anglais / français
 ├── renderer/      Interface React
 │   ├── App.tsx            écran opérateur

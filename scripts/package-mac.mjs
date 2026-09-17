@@ -36,7 +36,23 @@ await packager({
   extendInfo: {
     LSMinimumSystemVersion: '12.0',
     NSHighResolutionCapable: true,
-    CFBundleDevelopmentRegion: 'fr',
+    CFBundleDevelopmentRegion: 'en',
+    CFBundleLocalizations: ['en', 'fr'],
+    // Projets .cariprompt : double-clic dans le Finder
+    CFBundleDocumentTypes: [{
+      CFBundleTypeName: 'CariPrompt Project',
+      CFBundleTypeRole: 'Editor',
+      LSHandlerRank: 'Owner',
+      LSItemContentTypes: ['com.cariboulabs.cariprompt.project'],
+      CFBundleTypeIconFile: 'electron.icns',
+    }],
+    UTExportedTypeDeclarations: [{
+      UTTypeIdentifier: 'com.cariboulabs.cariprompt.project',
+      UTTypeDescription: 'CariPrompt Project',
+      UTTypeConformsTo: ['public.json', 'public.data'],
+      UTTypeIconFile: 'electron.icns',
+      UTTypeTagSpecification: { 'public.filename-extension': ['cariprompt'] },
+    }],
   },
 });
 

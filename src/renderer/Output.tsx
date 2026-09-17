@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import type { OutputState } from '../shared/types';
 import { PrompterCanvas } from './PrompterCanvas';
+import { DEFAULT_SETTINGS, textStyle } from './store';
 
 const EMPTY: OutputState = {
   text: '',
-  fontSize: 72,
-  alignment: 'left',
-  margin: 0.08,
-  readingLine: 0.33,
+  marks: [],
+  style: textStyle(DEFAULT_SETTINGS),
   mirror: 'none',
-  showReadingLine: true,
-  playback: { anchorProgress: 0, anchorTime: 0, isPlaying: false, countdown: null, totalDuration: 0 },
+  blackout: false,
+  playback: {
+    anchorProgress: 0, anchorTime: 0, isPlaying: false, countdown: null,
+    totalDuration: 0, chronoMs: 0, chronoStartedAt: null,
+  },
 };
 
 /** Fenêtre plein écran de l'écran de sortie. */

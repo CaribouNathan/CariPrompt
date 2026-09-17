@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type {
-  AppInfo, ChoiceItem, DisplayInfo, ForwardedInput, ImportResult, MenuCommand, OutputState, Prefs,
+  AppInfo, ChoiceItem, DisplayInfo, ProjectFile, ProjectReadResult, ForwardedInput, ImportResult, MenuCommand, OutputState, Prefs,
 } from '../shared/types';
 
 const on = <T>(channel: string, cb: (v: T) => void) => {
@@ -40,6 +40,19 @@ const api = {
 
   onFlushRequest: (cb: () => void) => on('app:flush', cb),
   flushDone: () => ipcRenderer.send('app:flushDone'),
+
+  listFonts: (): Promise<string[]> => ipcRenderer.invoke('fonts:list'),
+
+  saveProject: (data: ProjectFile, suggested: string): Promise<string | null> =>
+    ipcRenderer.invoke('project:save', data, suggested),
+  openProjectDialog: (): Promise<ProjectReadResult | null> => ipcRenderer.invoke('project:openDialog'),
+  readProject: (filePath: string): Promise<ProjectReadResult> => ipcRenderer.invoke('project:read', filePath),
+  onProjectLoaded: (cb: (r: ProjectReadResult) => void) => on('project:loaded', cb),
+  rendererReady: () => ipcRenderer.send('renderer:ready'),
+
+  setFullscreen: (on: boolean) => ipcRenderer.send('window:setFullscreen', on),
+  isFullscreen: (): Promise<boolean> => ipcRenderer.invoke('window:isFullscreen'),
+  onFullscreenChanged: (cb: (on: boolean) => void) => on('window:fullscreen', cb),
 
   onMenu: (cb: (cmd: MenuCommand) => void) => on('menu', cb),
 };

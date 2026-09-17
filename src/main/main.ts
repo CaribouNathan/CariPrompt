@@ -4,11 +4,13 @@ import {
 } from 'electron';
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync } from 'node:fs';
+import { listFonts } from './fonts';
 import { readFile, rename, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { isLang, isTheme, LANGUAGES, tr, type Lang, type StringKey, type ThemeMode } from '../shared/i18n';
 import type {
   AppInfo, ChoiceItem, DisplayInfo, ForwardedInput, ImportResult, MenuCommand, OutputState, Prefs,
+  ProjectFile, ProjectReadResult,
 } from '../shared/types';
 import { canImport, importFile, SUPPORTED_EXTENSIONS } from './importer';
 
@@ -33,7 +35,8 @@ app.setName('CariPrompt');
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_e, argv) => {
+    for (const arg of argv.slice(1)) if (isProjectPath(arg)) openProjectPath(arg);
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
@@ -71,6 +74,45 @@ function logError(context: string, err: unknown) {
   }
   console.error(line);
 }
+
+// MARK: - Projets .cariprompt
+
+const PROJECT_EXT = 'cariprompt';
+const pendingProjects: string[] = [];
+
+const isProjectPath = (p: string) => path.extname(p).toLowerCase() === `.${PROJECT_EXT}`;
+
+async function readProject(filePath: string): Promise<ProjectReadResult> {
+  const name = path.basename(filePath, path.extname(filePath));
+  try {
+    const data = JSON.parse(await readFile(filePath, 'utf8')) as ProjectFile;
+    if (data?.format !== 'cariprompt' || typeof data.script?.text !== 'string') throw new Error('format');
+    return { name, path: filePath, data };
+  } catch {
+    return { name, path: filePath, error: t('projectInvalid', { name: path.basename(filePath) }) };
+  }
+}
+
+/** Ouverture par double-clic / glisser sur l'icône : transmise à l'interface dès qu'elle est prête */
+function openProjectPath(filePath: string) {
+  if (!isProjectPath(filePath)) return;
+  if (mainWindow && rendererReady) {
+    readProject(filePath).then((r) => mainWindow?.webContents.send('project:loaded', r));
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  } else {
+    pendingProjects.push(filePath);
+  }
+}
+
+let rendererReady = false;
+
+app.on('open-file', (e, filePath) => {
+  e.preventDefault();
+  openProjectPath(filePath);
+});
+
+for (const arg of process.argv.slice(1)) if (isProjectPath(arg)) pendingProjects.push(arg);
 
 // MARK: - Préférences système
 
@@ -185,6 +227,9 @@ function createMainWindow() {
     );
     Menu.buildFromTemplate(items).popup({ window: mainWindow! });
   });
+
+  mainWindow.on('enter-full-screen', () => mainWindow?.webContents.send('window:fullscreen', true));
+  mainWindow.on('leave-full-screen', () => mainWindow?.webContents.send('window:fullscreen', false));
 
   // Fermeture : le renderer enregistre d'abord la bibliothèque (1,5 s maximum)
   let flushed = false;
@@ -324,6 +369,9 @@ function fileItems(): MenuItemConstructorOptions[] {
     cmdItem('newScript', 'CmdOrCtrl+N', 'new'),
     cmdItem('importDots', 'CmdOrCtrl+O', 'import'),
     { type: 'separator' },
+    cmdItem('openProject', 'CmdOrCtrl+Shift+O', 'openProject'),
+    cmdItem('saveProject', 'CmdOrCtrl+S', 'saveProject'),
+    { type: 'separator' },
     cmdItem('exportDots', 'CmdOrCtrl+Shift+E', 'export'),
     cmdItem('duplicate', 'CmdOrCtrl+D', 'duplicate'),
   ];
@@ -335,6 +383,7 @@ function prompterItems(): MenuItemConstructorOptions[] {
     cmdItem('rewind', 'CmdOrCtrl+R', 'rewind'),
     { type: 'separator' },
     cmdItem('toggleOutput', 'CmdOrCtrl+Shift+D', 'toggleOutput'),
+    cmdItem('fullscreen', 'CmdOrCtrl+Shift+F', 'toggleFullscreen'),
   ];
 }
 
@@ -486,6 +535,45 @@ function registerIpc() {
   });
 
   ipcMain.handle('displays:get', () => listDisplays());
+
+  ipcMain.handle('fonts:list', () => listFonts());
+
+  ipcMain.handle('project:save', async (_e, data: ProjectFile, suggested: string): Promise<string | null> => {
+    if (!mainWindow) return null;
+    const safe = suggested.replace(/[/\\?%*:|"<>]/g, '-').trim() || t('defaultFileName');
+    const r = await dialog.showSaveDialog(mainWindow, {
+      title: t('saveProjectTitle'),
+      defaultPath: `${safe}.${PROJECT_EXT}`,
+      filters: [{ name: t('projectFilter'), extensions: [PROJECT_EXT] }],
+    });
+    if (r.canceled || !r.filePath) return null;
+    await writeFile(r.filePath, JSON.stringify(data, null, 2), 'utf8');
+    app.addRecentDocument(r.filePath);
+    return path.basename(r.filePath);
+  });
+
+  ipcMain.handle('project:openDialog', async (): Promise<ProjectReadResult | null> => {
+    if (!mainWindow) return null;
+    const r = await dialog.showOpenDialog(mainWindow, {
+      title: t('openProjectTitle'),
+      properties: ['openFile'],
+      filters: [{ name: t('projectFilter'), extensions: [PROJECT_EXT] }],
+    });
+    if (r.canceled || !r.filePaths[0]) return null;
+    app.addRecentDocument(r.filePaths[0]);
+    return readProject(r.filePaths[0]);
+  });
+
+  ipcMain.handle('project:read', (_e, filePath: string) => readProject(filePath));
+
+  /** L'interface est prête : on lui transmet les projets ouverts avant son chargement */
+  ipcMain.on('renderer:ready', () => {
+    rendererReady = true;
+    for (const p of pendingProjects.splice(0)) openProjectPath(p);
+  });
+
+  ipcMain.on('window:setFullscreen', (_e, on: boolean) => mainWindow?.setFullScreen(on));
+  ipcMain.handle('window:isFullscreen', () => mainWindow?.isFullScreen() ?? false);
 
   ipcMain.on('output:show', (_e, displayId: number) => showOutput(displayId));
   ipcMain.on('output:hide', () => hideOutput());

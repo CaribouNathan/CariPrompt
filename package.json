@@ -1,7 +1,7 @@
 {
   "name": "cariprompt",
   "productName": "CariPrompt",
-  "version": "1.3.1",
+  "version": "1.4.1",
   "description": "Prompteur multi-écrans — Caribou Labs",
   "author": "Nathan Carrillat — Caribou Labs",
   "homepage": "https://github.com/CaribouNathan/CariPrompt",
@@ -84,7 +84,17 @@
     },
     "deb": {
       "artifactName": "${productName}-${version}-Linux-amd64.${ext}"
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": "cariprompt",
+        "name": "CariPrompt Project",
+        "description": "CariPrompt project",
+        "mimeType": "application/x-cariprompt",
+        "role": "Editor",
+        "icon": "build/icon"
+      }
+    ]
   },
   "desktopName": "cariprompt.desktop",
   "repository": {

@@ -13,6 +13,11 @@ const isTextField = (el: EventTarget | null): boolean => {
 function handlePrompterKey(key: string, code: string): boolean {
   const s = useStore.getState();
   switch (code) {
+    // Télécommandes de présentation (PowerPoint)
+    case 'PageDown': s.runClicker(s.settings.clickerNext); return true;
+    case 'PageUp': s.runClicker(s.settings.clickerPrev); return true;
+    case 'F5': if (!s.playback.isPlaying) s.play(); return true; // « démarrer le diaporama »
+    case 'KeyB': case 'Period': case 'NumpadDecimal': s.toggleBlackout(); return true;
     case 'Space': s.togglePlay(); return true;
     case 'ArrowDown': s.adjustSpeed(+1); return true;   // bas → plus vite
     case 'ArrowUp': s.adjustSpeed(-1); return true;     // haut → moins vite
@@ -23,6 +28,7 @@ function handlePrompterKey(key: string, code: string): boolean {
     case 'NumpadSubtract': s.adjustFont(-1); return true;
     default: break;
   }
+  if (key === '.' || key === 'b' || key === 'B') { s.toggleBlackout(); return true; }
   if (key === '+' || key === '=') { s.adjustFont(+1); return true; }
   if (key === '-' || key === '_') { s.adjustFont(-1); return true; }
   return false;
@@ -80,6 +86,9 @@ export function installOperatorInput() {
       else if (k === 'd' && e.shiftKey) s.toggleOutput();
       else if (k === 'd' && !e.shiftKey && !editing) { const c = s.current(); if (c) s.duplicate(c.id); }
       else if (k === 'r' && !e.shiftKey) s.jump(0);
+      else if (k === 's' && !e.shiftKey) s.saveProject();
+      else if (k === 'o' && e.shiftKey) s.openProjectDialog();
+      else if (k === 'f' && e.shiftKey) s.setFullscreen(!s.fullscreen);
       else if (k === 'q' && !isMac) window.close();
       else handled = false;
       if (handled) { e.preventDefault(); return; }
@@ -91,6 +100,12 @@ export function installOperatorInput() {
 
     if (e.key === 'Escape') {
       if (editing) (e.target as HTMLElement).blur();
+      else if (s.fullscreen) s.setFullscreen(false);
+      e.preventDefault();
+      return;
+    }
+    if (e.key === 'F11') {
+      s.setFullscreen(!s.fullscreen);
       e.preventDefault();
       return;
     }
@@ -134,6 +149,9 @@ export function installOperatorInput() {
       case 'rewind': s.jump(0); break;
       case 'toggleOutput': s.toggleOutput(); break;
       case 'togglePlay': s.togglePlay(); break;
+      case 'saveProject': s.saveProject(); break;
+      case 'openProject': s.openProjectDialog(); break;
+      case 'toggleFullscreen': s.setFullscreen(!s.fullscreen); break;
     }
   });
 }

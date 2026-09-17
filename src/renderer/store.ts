@@ -1,33 +1,52 @@
 import { create } from 'zustand';
 import { tr, type StringKey } from '../shared/i18n';
+import { normalizeMarks, remapMarks } from '../shared/marks';
 import {
-  autoTitle, clamp, countWords, FONT_MAX, FONT_MIN, FONT_STEP, progressAt,
-  WPM_MAX, WPM_MIN, WPM_STEP,
-  type AppInfo, type DisplayInfo, type OutputState, type Playback, type Prefs, type Script, type Settings,
+  autoTitle, clamp, countWords, DEFAULT_LINE_HEIGHT, DEFAULT_SPEED, FONT_MAX, FONT_MIN, FONT_STEP,
+  LINE_HEIGHT_MAX, LINE_HEIGHT_MIN, PROJECT_SETTING_KEYS, progressAt, SPEED_MAX, SPEED_MIN, SPEED_STEP,
+  WPM_PER_SPEED,
+  type AppInfo, type ClickerAction, type DisplayInfo, type OutputState, type Playback, type Prefs,
+  type ProjectFile, type ProjectReadResult, type ProjectSettings, type Script, type Settings,
+  type StyleMark, type Template, type TextStyle,
 } from '../shared/types';
 
 export const api = window.cari;
 
+export const DEFAULT_COLORS = {
+  textColor: '#ffffff',
+  backgroundColor: '#000000',
+  markerColor: '#0a84ff',
+};
+
 export const DEFAULT_SETTINGS: Settings = {
   fontSize: 72,
-  mirror: 'horizontal',
-  mirrorPreview: false,
+  fontFamily: '',
+  fontWeight: 600,
+  italic: false,
+  uppercase: false,
+  ...DEFAULT_COLORS,
+  lineHeight: DEFAULT_LINE_HEIGHT,
+  margin: 0.08,
   alignment: 'left',
   readingLine: 0.33,
-  margin: 0.08,
+  showReadingLine: true,
+  mirror: 'horizontal',
+  mirrorPreview: false,
+  mirrorFullscreen: false,
   countdownEnabled: true,
+  timecode: 'off',
   invertScroll: false,
+  clickerNext: 'playPause',
+  clickerPrev: 'back10',
+  templates: [],
   outputDisplayId: null,
   selectedScriptId: null,
   showInspector: true,
   editorWidth: 380,
   language: 'en',
   theme: 'system',
-  showReadingLine: true,
   welcomeSeeded: false,
 };
-
-
 
 export interface Banner {
   id: number;
@@ -46,15 +65,16 @@ export function displayTitle(s: Script): string {
   return s.autoTitle ? autoTitle(s.text, t('untitled')) : s.title;
 }
 
-function newScript(text = '', wpm = 140, title?: string): Script {
+function newScript(text = '', speed = DEFAULT_SPEED, title?: string): Script {
   const now = new Date().toISOString();
   return {
     id: crypto.randomUUID(),
     title: title ?? autoTitle(text, t('untitled')),
     autoTitle: title === undefined,
     text,
+    marks: [],
     wordCount: countWords(text),
-    wpm,
+    speed,
     targetEnabled: false,
     targetDuration: 60,
     createdAt: now,
@@ -62,22 +82,53 @@ function newScript(text = '', wpm = 140, title?: string): Script {
   };
 }
 
-export function effectiveWpm(s: Script | undefined): number {
-  if (!s) return 140;
-  if (s.targetEnabled && s.wordCount > 0 && s.targetDuration > 0) {
-    return clamp(s.wordCount / (s.targetDuration / 60), WPM_MIN, WPM_MAX);
-  }
-  return s.wpm;
-}
-
-export function targetWpm(s: Script | undefined): number | null {
+/** Vitesse demandée par la durée cible (non bornée) */
+export function targetSpeed(s: Script | undefined): number | null {
   if (!s || s.wordCount === 0 || s.targetDuration <= 0) return null;
-  return s.wordCount / (s.targetDuration / 60);
+  return s.wordCount / (s.targetDuration / 60) / WPM_PER_SPEED;
 }
 
+/** Vitesse effective 0–100 (la durée cible prime si elle est active) */
+export function effectiveSpeed(s: Script | undefined): number {
+  if (!s) return DEFAULT_SPEED;
+  if (s.targetEnabled) {
+    const ts = targetSpeed(s);
+    if (ts !== null) return clamp(ts, SPEED_MIN, SPEED_MAX);
+  }
+  return s.speed;
+}
+
+/** Durée totale en secondes (Infinity à vitesse 0) */
 export function totalDuration(s: Script | undefined): number {
   if (!s || s.wordCount === 0) return 0;
-  return (s.wordCount / effectiveWpm(s)) * 60;
+  const wpm = effectiveSpeed(s) * WPM_PER_SPEED;
+  return wpm > 0 ? (s.wordCount / wpm) * 60 : Infinity;
+}
+
+export function textStyle(st: Settings): TextStyle {
+  return {
+    fontSize: st.fontSize,
+    fontFamily: st.fontFamily,
+    fontWeight: st.fontWeight,
+    italic: st.italic,
+    uppercase: st.uppercase,
+    textColor: st.textColor,
+    backgroundColor: st.backgroundColor,
+    markerColor: st.markerColor,
+    lineHeight: st.lineHeight,
+    margin: st.margin,
+    alignment: st.alignment,
+    readingLine: st.readingLine,
+    showReadingLine: st.showReadingLine,
+    timecode: st.timecode,
+  };
+}
+
+/** Positions (progression 0–1) des débuts de paragraphes, fournies par l'aperçu */
+type StopsProvider = () => number[];
+let stopsProvider: StopsProvider | null = null;
+export function registerParagraphStops(fn: StopsProvider | null) {
+  stopsProvider = fn;
 }
 
 interface State {
@@ -91,6 +142,9 @@ interface State {
   banner: Banner | null;
   editing: boolean;
   dropActive: boolean;
+  blackout: boolean;
+  fullscreen: boolean;
+  fonts: string[] | null;
 }
 
 interface Actions {
@@ -105,14 +159,22 @@ interface Actions {
   remove(id: string): void;
   undoRemove(): void;
   updateText(text: string): void;
+  updateRich(text: string, marks: StyleMark[]): void;
+  setMarks(marks: StyleMark[]): void;
 
-  setWpm(v: number): void;
+  setSpeed(v: number): void;
   adjustSpeed(steps: number): void;
   setTargetEnabled(v: boolean): void;
   setTargetDuration(sec: number): void;
   setFont(v: number): void;
   adjustFont(steps: number): void;
+  setLineHeight(v: number): void;
   setSetting<K extends keyof Settings>(key: K, value: Settings[K]): void;
+  resetColors(): void;
+  loadFonts(): Promise<string[]>;
+  saveTemplate(name: string): void;
+  applyTemplate(id: string): void;
+  deleteTemplate(id: string): void;
 
   togglePlay(): void;
   play(): void;
@@ -120,14 +182,22 @@ interface Actions {
   stop(): void;
   seek(seconds: number): void;
   jump(p: number): void;
+  paragraph(direction: 1 | -1): void;
+  runClicker(action: ClickerAction): void;
+  toggleBlackout(): void;
 
   importPaths(paths: string[]): Promise<void>;
   importDialog(): Promise<void>;
   exportScript(id: string): Promise<void>;
+  saveProject(): Promise<void>;
+  openProjectDialog(): Promise<void>;
+  loadProject(r: ProjectReadResult): void;
 
   setDisplays(d: DisplayInfo[]): void;
   toggleOutput(): void;
   setOutputActive(v: boolean): void;
+  setFullscreen(on: boolean): void;
+  fullscreenChanged(on: boolean): void;
 
   showBanner(message: string, opts?: { canUndo?: boolean; isError?: boolean }): void;
   dismissBanner(): void;
@@ -143,6 +213,32 @@ let bannerTimer: number | null = null;
 let wakeLock: WakeLockSentinel | null = null;
 let lastDeleted: { script: Script; index: number } | null = null;
 let bannerSeq = 0;
+
+const freshPlayback = (totalDuration: number): Playback => ({
+  anchorProgress: 0,
+  anchorTime: Date.now(),
+  isPlaying: false,
+  countdown: null,
+  totalDuration,
+  chronoMs: 0,
+  chronoStartedAt: null,
+});
+
+/** Conversion d'un texte enregistré par une version antérieure */
+function migrateScript(raw: Script): Script {
+  const speed = typeof raw.speed === 'number'
+    ? raw.speed
+    : Math.round((raw.wpm ?? DEFAULT_SPEED * WPM_PER_SPEED) / WPM_PER_SPEED);
+  const { wpm: _legacy, ...rest } = raw;
+  const text = raw.text ?? '';
+  return {
+    ...rest,
+    text,
+    marks: normalizeMarks(text, Array.isArray(raw.marks) ? raw.marks : []),
+    speed: clamp(speed, SPEED_MIN, SPEED_MAX),
+    wordCount: countWords(text),
+  };
+}
 
 export const useStore = create<State & Actions>()((set, get) => {
   /** Fige la position avant toute modification qui change la durée totale. */
@@ -176,7 +272,10 @@ export const useStore = create<State & Actions>()((set, get) => {
   };
 
   const startPlayback = () => {
-    set((st) => ({ playback: { ...st.playback, isPlaying: true, countdown: null, anchorTime: Date.now() } }));
+    const now = Date.now();
+    set((st) => ({
+      playback: { ...st.playback, isPlaying: true, countdown: null, anchorTime: now, chronoStartedAt: now },
+    }));
     navigator.wakeLock?.request('screen').then((l) => { wakeLock = l; }).catch(() => undefined);
     endTimer = window.setInterval(() => {
       const { playback } = get();
@@ -189,21 +288,23 @@ export const useStore = create<State & Actions>()((set, get) => {
     info: { version: '', platform: 'darwin', naturalScroll: true },
     scripts: [],
     settings: DEFAULT_SETTINGS,
-    playback: { anchorProgress: 0, anchorTime: Date.now(), isPlaying: false, countdown: null, totalDuration: 0 },
+    playback: freshPlayback(0),
     displays: [],
     outputActive: false,
     banner: null,
     editing: false,
     dropActive: false,
+    blackout: false,
+    fullscreen: false,
+    fonts: null,
 
     async init() {
-      const [info, stored, displays, prefs] = await Promise.all([
-        api.appInfo(), api.loadStorage(), api.getDisplays(), api.getPrefs(),
+      const [info, stored, displays, prefs, fullscreen] = await Promise.all([
+        api.appInfo(), api.loadStorage(), api.getDisplays(), api.getPrefs(), api.isFullscreen(),
       ]);
       const settings: Settings = { ...DEFAULT_SETTINGS, ...((stored.settings as Partial<Settings>) ?? {}), ...prefs };
       set({ settings });
-      let scripts = Array.isArray(stored.scripts) ? (stored.scripts as Script[]) : [];
-      scripts = scripts.map((s) => ({ ...s, wordCount: countWords(s.text ?? '') }));
+      let scripts = Array.isArray(stored.scripts) ? (stored.scripts as Script[]).map(migrateScript) : [];
 
       // Textes de bienvenue : anglais (chargé) puis français, ajoutés une seule fois
       if (!settings.welcomeSeeded || scripts.length === 0) {
@@ -222,10 +323,7 @@ export const useStore = create<State & Actions>()((set, get) => {
         settings.outputDisplayId = displays.find((d) => !d.primary)?.id ?? null;
       }
       const cur = scripts.find((s) => s.id === settings.selectedScriptId);
-      set({
-        ready: true, info, scripts, settings, displays,
-        playback: { anchorProgress: 0, anchorTime: Date.now(), isPlaying: false, countdown: null, totalDuration: totalDuration(cur) },
-      });
+      set({ ready: true, info, scripts, settings, displays, fullscreen, playback: freshPlayback(totalDuration(cur)) });
     },
 
     current() {
@@ -245,12 +343,12 @@ export const useStore = create<State & Actions>()((set, get) => {
       const s = get().scripts.find((x) => x.id === id);
       set((st) => ({
         settings: { ...st.settings, selectedScriptId: id },
-        playback: { ...st.playback, anchorProgress: 0, anchorTime: Date.now(), totalDuration: totalDuration(s) },
+        playback: freshPlayback(totalDuration(s)),
       }));
     },
 
     createScript() {
-      const s = newScript('', effectiveWpm(get().current()));
+      const s = newScript('', effectiveSpeed(get().current()));
       set((st) => ({ scripts: [s, ...st.scripts] }));
       get().select(s.id);
     },
@@ -287,7 +385,7 @@ export const useStore = create<State & Actions>()((set, get) => {
       const removed = scripts[i];
       lastDeleted = { script: removed, index: i };
       let next = scripts.filter((s) => s.id !== id);
-      if (next.length === 0) next = [newScript('', removed.wpm)];
+      if (next.length === 0) next = [newScript('', removed.speed)];
       set({ scripts: next });
       if (settings.selectedScriptId === id) {
         const target = next[Math.min(i, next.length - 1)].id;
@@ -311,27 +409,37 @@ export const useStore = create<State & Actions>()((set, get) => {
     },
 
     updateText(text) {
+      const cur = get().current();
+      get().updateRich(text, cur ? remapMarks(cur.marks, cur.text, text) : []);
+    },
+
+    updateRich(text, marks) {
       mutateCurrent((s) => ({
         ...s,
         text,
+        marks: normalizeMarks(text, marks),
         wordCount: countWords(text),
         title: s.autoTitle ? autoTitle(text, t('untitled')) : s.title,
       }));
     },
 
-    // MARK: Vitesse / taille
+    setMarks(marks) {
+      mutateCurrent((s) => ({ ...s, marks: normalizeMarks(s.text, marks) }));
+    },
 
-    setWpm(v) {
-      const stepped = clamp(Math.round(v / WPM_STEP) * WPM_STEP, WPM_MIN, WPM_MAX);
-      mutateCurrent((s) => ({ ...s, wpm: stepped, targetEnabled: false }));
+    // MARK: Vitesse / texte
+
+    setSpeed(v) {
+      const stepped = clamp(Math.round(v / SPEED_STEP) * SPEED_STEP, SPEED_MIN, SPEED_MAX);
+      mutateCurrent((s) => ({ ...s, speed: stepped, targetEnabled: false }));
     },
 
     adjustSpeed(steps) {
-      get().setWpm(effectiveWpm(get().current()) + steps * WPM_STEP);
+      get().setSpeed(Math.round(effectiveSpeed(get().current())) + steps * SPEED_STEP);
     },
 
     setTargetEnabled(v) {
-      mutateCurrent((s) => ({ ...s, targetEnabled: v, wpm: v ? s.wpm : Math.round(effectiveWpm(s)) }));
+      mutateCurrent((s) => ({ ...s, targetEnabled: v, speed: v ? s.speed : Math.round(effectiveSpeed(s)) }));
     },
 
     setTargetDuration(sec) {
@@ -339,11 +447,15 @@ export const useStore = create<State & Actions>()((set, get) => {
     },
 
     setFont(v) {
-      get().setSetting('fontSize', clamp(v, FONT_MIN, FONT_MAX));
+      get().setSetting('fontSize', clamp(Math.round(v), FONT_MIN, FONT_MAX));
     },
 
     adjustFont(steps) {
       get().setFont(get().settings.fontSize + steps * FONT_STEP);
+    },
+
+    setLineHeight(v) {
+      get().setSetting('lineHeight', clamp(Math.round(v * 20) / 20, LINE_HEIGHT_MIN, LINE_HEIGHT_MAX));
     },
 
     setSetting(key, value) {
@@ -352,6 +464,48 @@ export const useStore = create<State & Actions>()((set, get) => {
         if (value === null) api.hideOutput();
         else api.showOutput(value as number);
       }
+    },
+
+    resetColors() {
+      set((st) => ({ settings: { ...st.settings, ...DEFAULT_COLORS } }));
+    },
+
+    async loadFonts() {
+      const cached = get().fonts;
+      if (cached) return cached;
+      const fonts = await api.listFonts();
+      set({ fonts });
+      return fonts;
+    },
+
+    saveTemplate(name) {
+      const clean = name.trim();
+      if (!clean) return;
+      const { settings } = get();
+      const preset = {} as ProjectSettings;
+      for (const k of PROJECT_SETTING_KEYS) (preset as unknown as Record<string, unknown>)[k] = settings[k];
+      const existing = settings.templates.find((tpl) => tpl.name.toLowerCase() === clean.toLowerCase());
+      const tplList = existing
+        ? settings.templates.map((tpl) => (tpl.id === existing.id ? { ...tpl, settings: preset } : tpl))
+        : [...settings.templates, { id: crypto.randomUUID(), name: clean, settings: preset, createdAt: new Date().toISOString() }];
+      set((st) => ({ settings: { ...st.settings, templates: tplList } }));
+      get().showBanner(t('templateSaved', { name: clean }));
+    },
+
+    applyTemplate(id) {
+      const tpl = get().settings.templates.find((x) => x.id === id);
+      if (!tpl) return;
+      const applied: Partial<Settings> = {};
+      for (const k of PROJECT_SETTING_KEYS) {
+        const v = (tpl.settings as unknown as Record<string, unknown>)[k];
+        if (v !== undefined && typeof v === typeof DEFAULT_SETTINGS[k]) (applied as Record<string, unknown>)[k] = v;
+      }
+      set((st) => ({ settings: { ...st.settings, ...applied } }));
+      get().showBanner(t('templateApplied', { name: tpl.name }));
+    },
+
+    deleteTemplate(id) {
+      set((st) => ({ settings: { ...st.settings, templates: st.settings.templates.filter((x) => x.id !== id) } }));
     },
 
     // MARK: Lecture
@@ -380,7 +534,15 @@ export const useStore = create<State & Actions>()((set, get) => {
     pause() {
       if (!get().playback.isPlaying) return;
       const pb = freeze();
-      set({ playback: { ...pb, isPlaying: false } });
+      const now = Date.now();
+      set({
+        playback: {
+          ...pb,
+          isPlaying: false,
+          chronoMs: pb.chronoMs + (pb.chronoStartedAt !== null ? now - pb.chronoStartedAt : 0),
+          chronoStartedAt: null,
+        },
+      });
       stopTimers();
     },
 
@@ -391,26 +553,78 @@ export const useStore = create<State & Actions>()((set, get) => {
 
     seek(seconds) {
       const { playback } = get();
-      if (playback.totalDuration <= 0) return;
-      get().jump(get().progressNow() + seconds / playback.totalDuration);
+      let total = playback.totalDuration;
+      // À vitesse 0, le pas de 10 s est calculé sur la vitesse par défaut
+      if (!Number.isFinite(total)) {
+        const cur = get().current();
+        total = cur && cur.wordCount > 0 ? (cur.wordCount / (DEFAULT_SPEED * WPM_PER_SPEED)) * 60 : 0;
+      }
+      if (total <= 0) return;
+      get().jump(get().progressNow() + seconds / total);
     },
 
     jump(p) {
-      set((st) => ({ playback: { ...st.playback, anchorProgress: clamp(p, 0, 1), anchorTime: Date.now() } }));
+      const target = clamp(p, 0, 1);
+      set((st) => {
+        const now = Date.now();
+        const pb = { ...st.playback, anchorProgress: target, anchorTime: now };
+        // Retour au début : le chrono de la prise repart de zéro
+        if (target === 0) {
+          pb.chronoMs = 0;
+          pb.chronoStartedAt = pb.isPlaying ? now : null;
+        }
+        return { playback: pb };
+      });
     },
 
-    // MARK: Import / export
+    paragraph(direction) {
+      const stops = stopsProvider?.() ?? [0];
+      const p = get().progressNow();
+      if (direction > 0) {
+        const next = stops.find((s) => s > p + 0.002);
+        if (next !== undefined) get().jump(next);
+      } else {
+        const prev = [...stops].reverse().find((s) => s < p - 0.01);
+        get().jump(prev ?? 0);
+      }
+    },
+
+    runClicker(action) {
+      const s = get();
+      switch (action) {
+        case 'playPause': s.togglePlay(); break;
+        case 'faster': s.adjustSpeed(+1); break;
+        case 'slower': s.adjustSpeed(-1); break;
+        case 'forward10': s.seek(10); break;
+        case 'back10': s.seek(-10); break;
+        case 'nextParagraph': s.paragraph(1); break;
+        case 'prevParagraph': s.paragraph(-1); break;
+        case 'rewind': s.jump(0); break;
+        default: break;
+      }
+    },
+
+    toggleBlackout() {
+      set((st) => ({ blackout: !st.blackout }));
+    },
+
+    // MARK: Import / export / projets
 
     async importPaths(paths) {
       if (paths.length === 0) return;
-      const results = await api.importFiles(paths);
+      const projects = paths.filter((p) => p.toLowerCase().endsWith('.cariprompt'));
+      const docs = paths.filter((p) => !p.toLowerCase().endsWith('.cariprompt'));
+      for (const p of projects) get().loadProject(await api.readProject(p));
+      if (docs.length === 0) return;
+
+      const results = await api.importFiles(docs);
       const ok = results.filter((r) => r.text !== undefined);
       const errors = results.filter((r) => r.error).map((r) => r.error!);
-      if (paths.length > results.length) errors.push(t('someUnsupported'));
+      if (docs.length > results.length) errors.push(t('someUnsupported'));
 
       if (ok.length) {
-        const wpm = effectiveWpm(get().current());
-        const created = ok.map((r) => newScript(r.text!, wpm, r.title));
+        const speed = Math.round(effectiveSpeed(get().current()));
+        const created = ok.map((r) => newScript(r.text!, speed, r.title));
         set((st) => ({ scripts: [...created.reverse(), ...st.scripts] }));
         get().select(created[0].id);
       }
@@ -432,7 +646,68 @@ export const useStore = create<State & Actions>()((set, get) => {
       }
     },
 
-    // MARK: Sortie
+    async saveProject() {
+      const { settings, info } = get();
+      const cur = get().current();
+      if (!cur) return;
+      const projectSettings: Partial<ProjectSettings> = {};
+      for (const k of PROJECT_SETTING_KEYS) (projectSettings as Record<string, unknown>)[k] = settings[k];
+      const data: ProjectFile = {
+        format: 'cariprompt',
+        formatVersion: 1,
+        appVersion: info.version,
+        savedAt: new Date().toISOString(),
+        script: {
+          title: displayTitle(cur),
+          text: cur.text,
+          marks: cur.marks,
+          speed: cur.speed,
+          targetEnabled: cur.targetEnabled,
+          targetDuration: cur.targetDuration,
+        },
+        settings: projectSettings,
+      };
+      try {
+        const name = await api.saveProject(data, displayTitle(cur));
+        if (name) get().showBanner(t('projectSaved', { name }));
+      } catch (e) {
+        get().showBanner(t('exportFailed', { msg: (e as Error).message }), { isError: true });
+      }
+    },
+
+    async openProjectDialog() {
+      const r = await api.openProjectDialog();
+      if (r) get().loadProject(r);
+    },
+
+    loadProject(r) {
+      if (!r.data) {
+        get().showBanner(r.error ?? t('projectInvalid', { name: r.name }), { isError: true });
+        return;
+      }
+      const { script, settings: ps } = r.data;
+      // Réglages : seules les clés connues et du bon type sont reprises
+      const applied: Partial<Settings> = {};
+      for (const k of PROJECT_SETTING_KEYS) {
+        const v = (ps as Record<string, unknown>)[k];
+        if (v !== undefined && typeof v === typeof DEFAULT_SETTINGS[k]) (applied as Record<string, unknown>)[k] = v;
+      }
+      set((st) => ({ settings: { ...st.settings, ...applied } }));
+
+      const s = newScript(
+        script.text,
+        clamp(Number(script.speed) || DEFAULT_SPEED, SPEED_MIN, SPEED_MAX),
+        script.title || r.name,
+      );
+      s.marks = normalizeMarks(s.text, Array.isArray(script.marks) ? script.marks : []);
+      s.targetEnabled = !!script.targetEnabled;
+      s.targetDuration = Number(script.targetDuration) || 60;
+      set((st) => ({ scripts: [s, ...st.scripts] }));
+      get().select(s.id);
+      get().showBanner(t('projectOpened', { name: r.name }));
+    },
+
+    // MARK: Sortie / plein écran
 
     setDisplays(displays) {
       const { settings } = get();
@@ -451,6 +726,16 @@ export const useStore = create<State & Actions>()((set, get) => {
 
     setOutputActive(v) {
       set({ outputActive: v });
+    },
+
+    setFullscreen(on) {
+      if (on) (document.activeElement as HTMLElement | null)?.blur();
+      set({ fullscreen: on }); // affichage immédiat, confirmé par l'événement de la fenêtre
+      api.setFullscreen(on);
+    },
+
+    fullscreenChanged(on) {
+      set({ fullscreen: on });
     },
 
     // MARK: Interface
@@ -490,23 +775,22 @@ export const useStore = create<State & Actions>()((set, get) => {
 export function startSync() {
   let saveScriptsTimer: number | null = null;
   let saveSettingsTimer: number | null = null;
-  let lastOutputJSON = '';
+  let lastKey = '';
 
   const pushOutput = (st: State & Actions) => {
     const cur = st.current();
     const out: OutputState = {
       text: cur?.text ?? '',
-      fontSize: st.settings.fontSize,
-      alignment: st.settings.alignment,
-      margin: st.settings.margin,
-      readingLine: st.settings.readingLine,
+      marks: cur?.marks ?? [],
+      style: textStyle(st.settings),
       mirror: st.settings.mirror,
-      showReadingLine: st.settings.showReadingLine,
+      blackout: st.blackout,
       playback: st.playback,
     };
-    const json = JSON.stringify(out);
-    if (json !== lastOutputJSON) {
-      lastOutputJSON = json;
+    // Infinity n'existe pas en JSON : clé de comparaison uniquement
+    const key = JSON.stringify(out, (_k, v) => (v === Infinity ? 'inf' : v));
+    if (key !== lastKey) {
+      lastKey = key;
       api.sendOutputState(out);
     }
   };
@@ -521,7 +805,8 @@ export function startSync() {
       if (saveSettingsTimer !== null) clearTimeout(saveSettingsTimer);
       saveSettingsTimer = window.setTimeout(() => api.saveSettings(useStore.getState().settings), 500);
     }
-    if (st.scripts !== prev.scripts || st.settings !== prev.settings || st.playback !== prev.playback) {
+    if (st.scripts !== prev.scripts || st.settings !== prev.settings
+      || st.playback !== prev.playback || st.blackout !== prev.blackout) {
       pushOutput(st);
     }
   });
@@ -530,4 +815,7 @@ export function startSync() {
   api.onDisplaysChanged((d) => useStore.getState().setDisplays(d));
   api.onOutputActive((v) => useStore.getState().setOutputActive(v));
   api.onPrefsChanged((p) => useStore.getState().applyPrefs(p));
+  api.onFullscreenChanged((on) => useStore.getState().fullscreenChanged(on));
+  api.onProjectLoaded((r) => useStore.getState().loadProject(r));
+  api.rendererReady();
 }
