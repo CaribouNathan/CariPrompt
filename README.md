@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/32324628/README.md)
 <p align="center">
   <img src="docs/icon.png" width="128" height="128" alt="Icône CariPrompt">
 </p>
