@@ -1,0 +1,104 @@
+{
+  "name": "cariprompt",
+  "productName": "CariPrompt",
+  "version": "1.3.1",
+  "description": "Prompteur multi-écrans — Caribou Labs",
+  "author": "Nathan Carrillat — Caribou Labs",
+  "homepage": "https://github.com/CaribouNathan/CariPrompt",
+  "license": "MIT",
+  "private": true,
+  "main": "dist/main/main.js",
+  "dependencies": {
+    "jszip": "^3.10.2",
+    "mammoth": "^1.12.3",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "unpdf": "^1.8.1",
+    "word-extractor": "^1.0.4",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "@types/node": "^26.6.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.4.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build && node scripts/build-main.mjs",
+    "start": "npm run build && electron .",
+    "dist:linux": "npm run build && electron-builder --linux --x64",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:mac": "npm run build && node scripts/package-mac.mjs"
+  },
+  "build": {
+    "appId": "com.cariboulabs.cariprompt",
+    "productName": "CariPrompt",
+    "copyright": "© 2026 Caribou Labs — Licence MIT",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "shortcutName": "CariPrompt",
+      "artifactName": "${productName}-${version}-Windows-Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-Windows-Portable.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icons",
+      "category": "AudioVideo",
+      "maintainer": "Caribou Labs <contact@cariboulabs.fr>",
+      "synopsis": "Prompteur multi-écrans",
+      "executableName": "cariprompt",
+      "syncDesktopName": true
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}-Linux-x86_64.${ext}"
+    },
+    "deb": {
+      "artifactName": "${productName}-${version}-Linux-amd64.${ext}"
+    }
+  },
+  "desktopName": "cariprompt.desktop",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CaribouNathan/CariPrompt.git"
+  },
+  "bugs": {
+    "url": "https://github.com/CaribouNathan/CariPrompt/issues"
+  },
+  "keywords": [
+    "prompteur",
+    "teleprompter",
+    "electron",
+    "video",
+    "caribou-labs"
+  ]
+}
