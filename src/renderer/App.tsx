@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { tr, type StringKey } from '../shared/i18n';
 import { applyStyle, styleAt, type MarkStyle } from '../shared/marks';
 import {
   formatDuration, FONT_MAX, FONT_MIN, FONT_STEP, LINE_HEIGHT_MAX, LINE_HEIGHT_MIN, progressAt,
   SPEED_MAX, SPEED_MIN, SPEED_STEP,
-  type ClickerAction, type Mirror, type OutputState, type StyleMark, type TimecodeMode,
+  type ClickerAction, type InspectorBlockId, type Mirror, type OutputState, type StyleMark,
+  type TimecodeMode, type WheelMode,
 } from '../shared/types';
 import iconUrl from '../../build/icons/64x64.png';
 import {
@@ -15,7 +16,7 @@ import {
 import { PrompterCanvas } from './PrompterCanvas';
 import { RichEditor, type Selection } from './RichEditor';
 import {
-  api, displayTitle, effectiveSpeed, registerParagraphStops, targetSpeed, textStyle, totalDuration, useStore,
+  api, displayTitle, effectiveSpeed, registerPreviewMetrics, targetSpeed, textStyle, totalDuration, useStore,
 } from './store';
 
 function useT() {
@@ -135,7 +136,7 @@ function TitleBar() {
           label={outputActive ? t('hideOutput') : t('showOutput')}
           shortcut={isMac ? '⌘⇧D' : `Ctrl+${t('keyShift')}D`}
           disabled={!hasOutput}
-          active={outputActive}
+          danger={outputActive}
           onClick={toggleOutput}
         >
           {outputActive ? <IconScreenOff size={17} /> : <IconScreen size={17} />}
@@ -161,13 +162,13 @@ function TitleBar() {
 }
 
 function ToolButton(props: {
-  label: string; shortcut?: string; disabled?: boolean; active?: boolean;
+  label: string; shortcut?: string; disabled?: boolean; active?: boolean; danger?: boolean;
   onClick: (e: RMouseEvent<HTMLButtonElement>) => void; children: ReactNode;
 }) {
   return (
     <button
       type="button"
-      className={`tool-btn${props.active ? ' active' : ''}`}
+      className={`tool-btn${props.active ? ' active' : ''}${props.danger ? ' danger' : ''}`}
       title={props.shortcut ? `${props.label} (${props.shortcut})` : props.label}
       aria-label={props.label}
       disabled={props.disabled}
@@ -200,17 +201,31 @@ function StatusPill() {
 function Sidebar() {
   const scripts = useStore((s) => s.scripts);
   const selectedId = useStore((s) => s.settings.selectedScriptId);
-  const { select, createScript, importDialog, duplicate, exportScript, remove } = useStore.getState();
+  const selectedIds = useStore((s) => s.selectedIds);
+  const {
+    select, selectRange, toggleSelect, createScript, importDialog,
+    duplicate, duplicateMany, exportScript, remove, removeMany,
+  } = useStore.getState();
   const isMac = useStore((s) => s.info.platform === 'darwin');
   const mod = isMac ? '⌘' : 'Ctrl+';
   const t = useT();
 
+  const marked = (id: string) => (selectedIds.length > 1 ? selectedIds.includes(id) : id === selectedId);
+
+  const click = (e: RMouseEvent, id: string) => {
+    if (e.button !== 0) return;
+    if (e.shiftKey) selectRange(id);
+    else if (e.metaKey || e.ctrlKey) toggleSelect(id);
+    else select(id);
+  };
+
   const openMenu = async (id: string) => {
-    select(id);
-    const choice = await api.scriptMenu(true);
-    if (choice === 'duplicate') duplicate(id);
-    else if (choice === 'export') exportScript(id);
-    else if (choice === 'delete') remove(id);
+    const ids = selectedIds.length > 1 && selectedIds.includes(id) ? selectedIds : [id];
+    if (ids.length === 1) select(id);
+    const choice = await api.scriptMenu(ids.length);
+    if (choice === 'duplicate') duplicateMany(ids);
+    else if (choice === 'export') exportScript(ids[0]);
+    else if (choice === 'delete') removeMany(ids);
   };
 
   return (
@@ -220,8 +235,8 @@ function Sidebar() {
         {scripts.map((s) => (
           <div
             key={s.id}
-            className={`script-row${s.id === selectedId ? ' selected' : ''}`}
-            onMouseDown={(e) => { if (e.button === 0) select(s.id); }}
+            className={`script-row${marked(s.id) ? ' selected' : ''}${s.id === selectedId ? ' current' : ''}`}
+            onMouseDown={(e) => click(e, s.id)}
             onContextMenu={(e) => { e.preventDefault(); openMenu(s.id); }}
           >
             <IconDoc size={16} className="script-icon" />
@@ -295,7 +310,7 @@ function ShortcutsPanel() {
       </button>
       {open && (
         <dl className="shortcuts" data-scroll>
-          <dt>{t('keySpace')}</dt><dd>{t('scPlayPause')}</dd>
+          <dt>{isMac ? '⌥' : 'Alt'} + {t('keySpace')}</dt><dd>{t('scPlayPause')}</dd>
           <dt>↓ / ↑</dt><dd>{t('scFasterSlower')}</dd>
           <dt>← / →</dt><dd>{t('scSeek')}</dd>
           <dt>+ / −</dt><dd>{t('scTextSize')}</dd>
@@ -402,6 +417,7 @@ function Editor() {
         placeholder={t('textPlaceholder')}
         onChange={updateRich}
         onSelectionChange={setSelection}
+        onCaretClick={(offset) => useStore.getState().jumpToOffset(offset)}
         onFocusChange={setEditing}
       />
 
@@ -504,7 +520,12 @@ function Stage() {
 
   return (
     <main className="stage">
-      <div className="preview-box" ref={boxRef} onMouseDown={() => (document.activeElement as HTMLElement)?.blur()}>
+      <div
+        className="preview-box"
+        ref={boxRef}
+        data-prompter-wheel
+        onMouseDown={() => (document.activeElement as HTMLElement)?.blur()}
+      >
         {scale > 0 && (
           <div className="preview-frame" style={{ width: canvasW * scale, height: canvasH * scale }}>
             <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: canvasW, height: canvasH }}>
@@ -513,7 +534,7 @@ function Stage() {
                 width={canvasW}
                 height={canvasH}
                 mirror={mirror}
-                onStopsProvider={registerParagraphStops}
+                onMetrics={registerPreviewMetrics}
               />
             </div>
           </div>
@@ -529,6 +550,8 @@ function Transport() {
   const { togglePlay, seek, jump } = useStore.getState();
   const [, force] = useState(0);
   const t = useT();
+  const isMac = useStore((s) => s.info.platform === 'darwin');
+  const playHint = `${t('playPauseHint')} (${isMac ? '⌥' : 'Alt'} + ${t('keySpace')})`;
 
   useEffect(() => {
     if (!playback.isPlaying) return;
@@ -561,7 +584,7 @@ function Transport() {
             onMouseDown={(e) => e.preventDefault()} onClick={() => seek(-10)}>
             <IconBack10 size={24} />
           </button>
-          <button type="button" className="play-btn" title={t('playPauseHint')} tabIndex={-1}
+          <button type="button" className="play-btn" title={playHint} tabIndex={-1}
             onMouseDown={(e) => e.preventDefault()} onClick={togglePlay}>
             {icon}
           </button>
@@ -588,6 +611,27 @@ function Inspector() {
   const st = useStore.getState();
   const t = useT();
   const [presetPrompt, setPresetPrompt] = useState(false);
+  const [dragId, setDragId] = useState<InspectorBlockId | null>(null);
+  const [overId, setOverId] = useState<InspectorBlockId | null>(null);
+
+  // La source est gardée dans une référence : les événements dragover et drop
+  // peuvent survenir avant que React n'ait réaffiché après dragstart.
+  const dragRef = useRef<InspectorBlockId | null>(null);
+  const dnd: BlockDnd = {
+    dragId,
+    overId,
+    isDragging: () => dragRef.current !== null,
+    onStart: (id) => { dragRef.current = id; setDragId(id); },
+    onOver: (id) => { if (dragRef.current && dragRef.current !== id) setOverId(id); },
+    onEnd: () => { dragRef.current = null; setDragId(null); setOverId(null); },
+    onDrop: (to) => {
+      const from = dragRef.current;
+      dragRef.current = null;
+      setDragId(null);
+      setOverId(null);
+      if (from) useStore.getState().moveInspectorBlock(from, to);
+    },
+  };
 
   useEffect(() => {
     useStore.getState().loadFonts().catch(() => undefined);
@@ -611,9 +655,9 @@ function Inspector() {
     fontOptions.push({ id: settings.fontFamily, label: settings.fontFamily });
   }
 
-  return (
-    <aside className="inspector" data-scroll>
-      <Group title={t('templates')}>
+  const blocks: Record<InspectorBlockId, ReactNode> = {
+    templates: (
+      <Group id="templates" dnd={dnd} title={t('templates')}>
         <Row label={t('choosePreset')}>
           <ChoiceButton
             value=""
@@ -645,18 +689,9 @@ function Inspector() {
           </div>
         )}
       </Group>
-
-      {presetPrompt && (
-        <PromptDialog
-          title={t('savePreset')}
-          label={t('presetName')}
-          placeholder={t('presetExample')}
-          onCancel={() => setPresetPrompt(false)}
-          onSubmit={(name) => { setPresetPrompt(false); st.saveTemplate(name); }}
-        />
-      )}
-
-      <Group title={t('speed')}>
+    ),
+    speed: (
+      <Group id="speed" dnd={dnd} title={t('speed')}>
         <Row label={t('speed')}>
           <strong className="num">{speed === 0 ? t('speedStopped') : Math.round(speed)}</strong>
         </Row>
@@ -665,8 +700,9 @@ function Inspector() {
         <Row label={t('estimatedDuration')}><span className="num">{formatDuration(totalDuration(cur))}</span></Row>
         <Row label={t('script')}><span className="num">{t('words', { n: cur?.wordCount ?? 0 })}</span></Row>
       </Group>
-
-      <Group title={t('targetDuration')}>
+    ),
+    target: (
+      <Group id="target" dnd={dnd} title={t('targetDuration')}>
         <Row label={t('fitToDuration')}>
           <Toggle checked={!!cur?.targetEnabled} onChange={st.setTargetEnabled} />
         </Row>
@@ -689,8 +725,9 @@ function Inspector() {
           <p className="note">{t('manualDisablesTarget')}</p>
         )}
       </Group>
-
-      <Group title={t('typography')}>
+    ),
+    typography: (
+      <Group id="typography" dnd={dnd} title={t('typography')}>
         <Row label={t('font')}>
           <ChoiceButton
             value={settings.fontFamily}
@@ -715,8 +752,9 @@ function Inspector() {
           <Toggle checked={settings.uppercase} onChange={(v) => st.setSetting('uppercase', v)} />
         </Row>
       </Group>
-
-      <Group title={t('colors')}>
+    ),
+    colors: (
+      <Group id="colors" dnd={dnd} title={t('colors')}>
         <Row label={t('textColor')}>
           <ColorField value={settings.textColor} onChange={(v) => st.setSetting('textColor', v)} />
         </Row>
@@ -731,8 +769,9 @@ function Inspector() {
           {t('resetColors')}
         </button>
       </Group>
-
-      <Group title={t('layout')}>
+    ),
+    layout: (
+      <Group id="layout" dnd={dnd} title={t('layout')}>
         <Row label={t('alignment')}>
           <Segmented
             value={settings.alignment}
@@ -755,6 +794,10 @@ function Inspector() {
           <Slider min={0.15} max={0.6} step={0.01} value={settings.readingLine}
             onChange={(v) => st.setSetting('readingLine', v)} />
         </Row>
+      </Group>
+    ),
+    timecode: (
+      <Group id="timecode" dnd={dnd} title={t('timecodeGroup')}>
         <Row label={t('timecode')}>
           <ChoiceButton
             value={settings.timecode}
@@ -768,8 +811,9 @@ function Inspector() {
           />
         </Row>
       </Group>
-
-      <Group title={t('output')}>
+    ),
+    output: (
+      <Group id="output" dnd={dnd} title={t('output')}>
         <Row label={t('display')}>
           <ChoiceButton
             value={settings.outputDisplayId === null ? '' : String(settings.outputDisplayId)}
@@ -804,7 +848,7 @@ function Inspector() {
         <div className="button-pair">
           <button
             type="button"
-            className={`push-btn${outputActive ? '' : ' primary'}`}
+            className={`push-btn${outputActive ? ' danger' : ' primary'}`}
             disabled={settings.outputDisplayId === null}
             tabIndex={-1}
             onMouseDown={(e) => e.preventDefault()}
@@ -823,8 +867,9 @@ function Inspector() {
           </button>
         </div>
       </Group>
-
-      <Group title={t('clicker')}>
+    ),
+    clicker: (
+      <Group id="clicker" dnd={dnd} title={t('clicker')}>
         <Row label={t('clickerNext')}>
           <ChoiceButton
             value={settings.clickerNext}
@@ -841,15 +886,58 @@ function Inspector() {
         </Row>
         <p className="note">{t('clickerNote')}</p>
       </Group>
-
-      <Group title={t('controls')}>
+    ),
+    controls: (
+      <Group id="controls" dnd={dnd} title={t('controls')}>
         <Row label={t('countdown')}>
           <Toggle checked={settings.countdownEnabled} onChange={(v) => st.setSetting('countdownEnabled', v)} />
         </Row>
         <Row label={t('invertScroll')}>
           <Toggle checked={settings.invertScroll} onChange={(v) => st.setSetting('invertScroll', v)} />
         </Row>
+        <Row label={t('wheelPreview')}>
+          <ChoiceButton
+            value={settings.wheelPreview}
+            options={[
+              { id: 'navigate', label: t('wheelNavigate') },
+              { id: 'speed', label: t('wheelSpeed') },
+            ]}
+            onChange={(v) => st.setSetting('wheelPreview', v as WheelMode)}
+          />
+        </Row>
+        <p className="note">{t('wheelNote')}</p>
       </Group>
+    ),
+  };
+
+  return (
+    <aside className="inspector" data-scroll>
+      {settings.inspectorOrder.map((id) => (
+        <Fragment key={id}>{blocks[id]}</Fragment>
+      ))}
+
+      <p className="note order-note">
+        {t('orderNote')}{' '}
+        <button
+          type="button"
+          className="link-btn"
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={st.resetInspectorOrder}
+        >
+          {t('resetOrder')}
+        </button>
+      </p>
+
+      {presetPrompt && (
+        <PromptDialog
+          title={t('savePreset')}
+          label={t('presetName')}
+          placeholder={t('presetExample')}
+          onCancel={() => setPresetPrompt(false)}
+          onSubmit={(name) => { setPresetPrompt(false); st.saveTemplate(name); }}
+        />
+      )}
     </aside>
   );
 }
@@ -908,10 +996,61 @@ function ColorField({ value, onChange }: { value: string; onChange: (v: string) 
   );
 }
 
-function Group({ title, children }: { title: string; children: ReactNode }) {
+interface BlockDnd {
+  dragId: InspectorBlockId | null;
+  overId: InspectorBlockId | null;
+  isDragging: () => boolean;
+  onStart: (id: InspectorBlockId) => void;
+  onOver: (id: InspectorBlockId) => void;
+  onEnd: () => void;
+  onDrop: (id: InspectorBlockId) => void;
+}
+
+/** Bloc de réglages, déplaçable par sa poignée (l'en-tête seul est draggable,
+ *  pour ne pas gêner les curseurs et les champs qu'il contient). */
+function Group({ id, title, children, dnd }: {
+  id: InspectorBlockId; title: string; children: ReactNode; dnd: BlockDnd;
+}) {
+  const t = useT();
+  const dragging = dnd.dragId === id;
+  const over = dnd.overId === id && dnd.dragId !== null && dnd.dragId !== id;
+  const below = over && dnd.dragId !== null
+    && useStore.getState().settings.inspectorOrder.indexOf(dnd.dragId) < useStore.getState().settings.inspectorOrder.indexOf(id);
   return (
-    <section className="group">
-      <h3>{title}</h3>
+    <section
+      className={`group${dragging ? ' dragging' : ''}${over ? (below ? ' drag-below' : ' drag-above') : ''}`}
+      onDragOver={(e) => {
+        if (!dnd.isDragging()) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        dnd.onOver(id);
+      }}
+      onDrop={(e) => {
+        if (!dnd.isDragging()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dnd.onDrop(id);
+      }}
+    >
+      <h3
+        draggable
+        title={t('dragToReorder')}
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', id);
+          dnd.onStart(id);
+        }}
+        onDragEnd={dnd.onEnd}
+      >
+        <span className="drag-handle" aria-hidden>
+          <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+            <circle cx="2.5" cy="3" r="1.15" /><circle cx="7.5" cy="3" r="1.15" />
+            <circle cx="2.5" cy="7" r="1.15" /><circle cx="7.5" cy="7" r="1.15" />
+            <circle cx="2.5" cy="11" r="1.15" /><circle cx="7.5" cy="11" r="1.15" />
+          </svg>
+        </span>
+        {title}
+      </h3>
       <div className="group-card">{children}</div>
     </section>
   );

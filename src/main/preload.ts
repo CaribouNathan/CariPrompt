@@ -19,7 +19,7 @@ const api = {
   importFiles: (paths: string[]): Promise<ImportResult[]> => ipcRenderer.invoke('import:files', paths),
   importDialog: (): Promise<string[]> => ipcRenderer.invoke('import:dialog'),
   exportTxt: (title: string, text: string): Promise<boolean> => ipcRenderer.invoke('export:txt', title, text),
-  scriptMenu: (canDelete: boolean): Promise<string | null> => ipcRenderer.invoke('menu:script', canDelete),
+  scriptMenu: (count: number): Promise<string | null> => ipcRenderer.invoke('menu:script', count),
 
   getDisplays: (): Promise<DisplayInfo[]> => ipcRenderer.invoke('displays:get'),
   onDisplaysChanged: (cb: (d: DisplayInfo[]) => void) => on('displays:changed', cb),

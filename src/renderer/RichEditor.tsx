@@ -115,6 +115,8 @@ interface Props {
   placeholder: string;
   onChange: (text: string, marks: StyleMark[]) => void;
   onSelectionChange: (sel: Selection | null) => void;
+  /** Clic dans le texte : position du curseur, pour se caler dans l'aperçu */
+  onCaretClick: (offset: number) => void;
   onFocusChange: (focused: boolean) => void;
 }
 
@@ -124,7 +126,7 @@ interface Props {
  * ouverture de projet, style appliqué), pour ne jamais déplacer le curseur pendant la frappe.
  */
 export function RichEditor({
-  scriptId, text, marks, placeholder, onChange, onSelectionChange, onFocusChange,
+  scriptId, text, marks, placeholder, onChange, onSelectionChange, onCaretClick, onFocusChange,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const lastParsed = useRef('');
@@ -188,6 +190,10 @@ export function RichEditor({
       data-placeholder={placeholder}
       data-empty={text.length === 0 ? 'true' : undefined}
       onInput={handleInput}
+      onMouseUp={() => {
+        const sel = readSelection();
+        if (sel) onCaretClick(sel.start);
+      }}
       onFocus={() => onFocusChange(true)}
       onBlur={() => { onFocusChange(false); onSelectionChange(null); }}
       onPaste={(e) => {

@@ -3,6 +3,33 @@
 Toutes les évolutions notables de CariPrompt sont listées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et la numérotation suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [1.5.0] — 2026-09-18
+
+### Ajouté
+- **Panneau de réglages réorganisable** : chaque bloc se déplace en le glissant par son en-tête. Un lien remet la disposition par défaut.
+- L'**ordre des blocs** est enregistré dans les préréglages et dans les projets `.cariprompt`.
+
+### Modifié
+- La **taille du texte** monte désormais jusqu'à **400 pt** (au lieu de 220).
+- **Lecture / pause** passe de Espace à **⌥ + Espace** (Alt + Espace sous Windows et Linux), pour éviter les déclenchements involontaires. Le raccourci fonctionne désormais aussi pendant la saisie du texte, et le rappel des raccourcis est à jour. Espace seul n'a plus d'effet, sans bip.
+
+### Remarque
+- L'ordre des blocs revient à la disposition par défaut à chaque lancement : c'est le comportement demandé. Pour le retrouver, appliquez un préréglage qui le contient.
+
+## [1.4.2] — 2026-09-18
+
+### Ajouté
+- **Molette dans toute la fenêtre** : défilement normal dans la colonne d'édition et la liste des textes ; au-dessus de l'aperçu, la molette **navigue dans le texte**. La touche ⌥ donne l'autre action, et un réglage (Commandes › Molette sur l'aperçu) permet d'inverser les deux.
+- **Sélection multiple** dans la liste des textes : ⇧ + clic pour une plage, ⌘ ou Ctrl + clic pour ajouter ou retirer. Duplication et suppression agissent sur toute la sélection, avec annulation.
+- **Synchronisation au clic** : cliquer dans le texte de l'éditeur place l'aperçu au même endroit.
+
+### Modifié
+- Le **timecode** a son propre bloc dans les réglages, en dehors de la mise en page.
+- Le bouton **Masquer la sortie** passe en rouge quand la sortie est affichée, ainsi que l'indicateur de la barre d'outils.
+
+### Corrigé
+- **macOS** : après l'affichage de la sortie, l'application disparaissait du Dock, de Cmd+Tab et de la barre de menus. L'option `skipTransformProcessType` évite le changement de type de processus, la fenêtre de sortie n'est plus créée comme panneau non activant, et la fenêtre opérateur reprend le premier plan.
+
 ## [1.4.1] — 2026-09-18
 
 ### Ajouté
@@ -99,6 +126,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et la nu
 - Décompte de 3 secondes au lancement.
 - Raccourcis : Espace, flèches, +/−, molette.
 
+[1.5.0]: https://github.com/CaribouNathan/CariPrompt/releases/tag/v1.5.0
+[1.4.2]: https://github.com/CaribouNathan/CariPrompt/releases/tag/v1.4.2
 [1.4.1]: https://github.com/CaribouNathan/CariPrompt/releases/tag/v1.4.1
 [1.4.0]: https://github.com/CaribouNathan/CariPrompt/releases/tag/v1.4.0
 [1.3.1]: https://github.com/CaribouNathan/CariPrompt/releases/tag/v1.3.1

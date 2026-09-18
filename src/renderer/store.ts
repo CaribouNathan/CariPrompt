@@ -3,9 +3,11 @@ import { tr, type StringKey } from '../shared/i18n';
 import { normalizeMarks, remapMarks } from '../shared/marks';
 import {
   autoTitle, clamp, countWords, DEFAULT_LINE_HEIGHT, DEFAULT_SPEED, FONT_MAX, FONT_MIN, FONT_STEP,
+  INSPECTOR_BLOCKS, sanitizeInspectorOrder,
   LINE_HEIGHT_MAX, LINE_HEIGHT_MIN, PROJECT_SETTING_KEYS, progressAt, SPEED_MAX, SPEED_MIN, SPEED_STEP,
   WPM_PER_SPEED,
-  type AppInfo, type ClickerAction, type DisplayInfo, type OutputState, type Playback, type Prefs,
+  type AppInfo, type ClickerAction, type DisplayInfo, type InspectorBlockId, type OutputState,
+  type Playback, type Prefs,
   type ProjectFile, type ProjectReadResult, type ProjectSettings, type Script, type Settings,
   type StyleMark, type Template, type TextStyle,
 } from '../shared/types';
@@ -36,8 +38,10 @@ export const DEFAULT_SETTINGS: Settings = {
   countdownEnabled: true,
   timecode: 'off',
   invertScroll: false,
+  wheelPreview: 'navigate',
   clickerNext: 'playPause',
   clickerPrev: 'back10',
+  inspectorOrder: [...INSPECTOR_BLOCKS],
   templates: [],
   outputDisplayId: null,
   selectedScriptId: null,
@@ -124,11 +128,14 @@ export function textStyle(st: Settings): TextStyle {
   };
 }
 
-/** Positions (progression 0–1) des débuts de paragraphes, fournies par l'aperçu */
-type StopsProvider = () => number[];
-let stopsProvider: StopsProvider | null = null;
-export function registerParagraphStops(fn: StopsProvider | null) {
-  stopsProvider = fn;
+/** Mesures fournies par l'aperçu : débuts de paragraphes et position d'un caractère */
+export interface PreviewMetrics {
+  stops: () => number[];
+  progressForOffset: (offset: number) => number | null;
+}
+let previewMetrics: PreviewMetrics | null = null;
+export function registerPreviewMetrics(m: PreviewMetrics | null) {
+  previewMetrics = m;
 }
 
 interface State {
@@ -142,6 +149,8 @@ interface State {
   banner: Banner | null;
   editing: boolean;
   dropActive: boolean;
+  /** Textes sélectionnés dans la colonne de gauche (le dernier est celui chargé) */
+  selectedIds: string[];
   blackout: boolean;
   fullscreen: boolean;
   fonts: string[] | null;
@@ -153,11 +162,16 @@ interface Actions {
   progressNow(): number;
 
   select(id: string): void;
+  selectRange(id: string): void;
+  toggleSelect(id: string): void;
   createScript(): void;
   duplicate(id: string): void;
   rename(id: string, title: string): void;
   remove(id: string): void;
+  removeMany(ids: string[]): void;
+  duplicateMany(ids: string[]): void;
   undoRemove(): void;
+  _undoSingle(): void;
   updateText(text: string): void;
   updateRich(text: string, marks: StyleMark[]): void;
   setMarks(marks: StyleMark[]): void;
@@ -171,6 +185,8 @@ interface Actions {
   setLineHeight(v: number): void;
   setSetting<K extends keyof Settings>(key: K, value: Settings[K]): void;
   resetColors(): void;
+  moveInspectorBlock(from: InspectorBlockId, to: InspectorBlockId): void;
+  resetInspectorOrder(): void;
   loadFonts(): Promise<string[]>;
   saveTemplate(name: string): void;
   applyTemplate(id: string): void;
@@ -183,6 +199,7 @@ interface Actions {
   seek(seconds: number): void;
   jump(p: number): void;
   paragraph(direction: 1 | -1): void;
+  jumpToOffset(offset: number): void;
   runClicker(action: ClickerAction): void;
   toggleBlackout(): void;
 
@@ -212,6 +229,7 @@ let endTimer: number | null = null;
 let bannerTimer: number | null = null;
 let wakeLock: WakeLockSentinel | null = null;
 let lastDeleted: { script: Script; index: number } | null = null;
+let lastDeletedMany: Array<{ script: Script; index: number }> | null = null;
 let bannerSeq = 0;
 
 const freshPlayback = (totalDuration: number): Playback => ({
@@ -294,6 +312,7 @@ export const useStore = create<State & Actions>()((set, get) => {
     banner: null,
     editing: false,
     dropActive: false,
+    selectedIds: [],
     blackout: false,
     fullscreen: false,
     fonts: null,
@@ -303,6 +322,9 @@ export const useStore = create<State & Actions>()((set, get) => {
         api.appInfo(), api.loadStorage(), api.getDisplays(), api.getPrefs(), api.isFullscreen(),
       ]);
       const settings: Settings = { ...DEFAULT_SETTINGS, ...((stored.settings as Partial<Settings>) ?? {}), ...prefs };
+      // L'ordre des blocs repart de la disposition par défaut à chaque lancement ;
+      // seuls les préréglages et les projets le restituent.
+      settings.inspectorOrder = [...INSPECTOR_BLOCKS];
       set({ settings });
       let scripts = Array.isArray(stored.scripts) ? (stored.scripts as Script[]).map(migrateScript) : [];
 
@@ -338,6 +360,7 @@ export const useStore = create<State & Actions>()((set, get) => {
     // MARK: Bibliothèque
 
     select(id) {
+      set({ selectedIds: [id] });
       if (id === get().settings.selectedScriptId) return;
       get().stop();
       const s = get().scripts.find((x) => x.id === id);
@@ -345,6 +368,32 @@ export const useStore = create<State & Actions>()((set, get) => {
         settings: { ...st.settings, selectedScriptId: id },
         playback: freshPlayback(totalDuration(s)),
       }));
+    },
+
+    /** Maj + clic : étend la sélection depuis le texte chargé */
+    selectRange(id) {
+      const { scripts, settings, selectedIds } = get();
+      const anchorId = settings.selectedScriptId ?? selectedIds[0] ?? id;
+      const a = scripts.findIndex((s) => s.id === anchorId);
+      const b = scripts.findIndex((s) => s.id === id);
+      if (a < 0 || b < 0) return;
+      const [from, to] = a <= b ? [a, b] : [b, a];
+      set({ selectedIds: scripts.slice(from, to + 1).map((s) => s.id) });
+    },
+
+    /** ⌘ ou Ctrl + clic : ajoute ou retire un texte de la sélection */
+    toggleSelect(id) {
+      const { selectedIds, settings } = get();
+      const base = selectedIds.length ? selectedIds : (settings.selectedScriptId ? [settings.selectedScriptId] : []);
+      const next = base.includes(id) ? base.filter((x) => x !== id) : [...base, id];
+      if (next.length === 0) return;
+      set({ selectedIds: next });
+      if (!next.includes(settings.selectedScriptId ?? '')) {
+        const target = next[next.length - 1];
+        set((st) => ({ settings: { ...st.settings, selectedScriptId: null } }));
+        get().select(target);
+        set({ selectedIds: next });
+      }
     },
 
     createScript() {
@@ -384,6 +433,7 @@ export const useStore = create<State & Actions>()((set, get) => {
       if (i < 0) return;
       const removed = scripts[i];
       lastDeleted = { script: removed, index: i };
+      lastDeletedMany = null;
       let next = scripts.filter((s) => s.id !== id);
       if (next.length === 0) next = [newScript('', removed.speed)];
       set({ scripts: next });
@@ -395,7 +445,45 @@ export const useStore = create<State & Actions>()((set, get) => {
       get().showBanner(t('deleted', { title: displayTitle(removed) }), { canUndo: true });
     },
 
+    removeMany(ids) {
+      if (ids.length <= 1) { get().remove(ids[0]); return; }
+      const { scripts } = get();
+      const removed = scripts
+        .map((s, i) => ({ s, i }))
+        .filter(({ s }) => ids.includes(s.id));
+      lastDeletedMany = removed.map(({ s, i }) => ({ script: s, index: i }));
+      lastDeleted = null;
+      let next = scripts.filter((s) => !ids.includes(s.id));
+      if (next.length === 0) next = [newScript('', DEFAULT_SPEED)];
+      const keep = next[Math.min(removed[0].i, next.length - 1)].id;
+      set({ scripts: next, selectedIds: [keep] });
+      set((st) => ({ settings: { ...st.settings, selectedScriptId: null } }));
+      get().select(keep);
+      get().showBanner(t('deletedMany', { n: ids.length }), { canUndo: true });
+    },
+
+    duplicateMany(ids) {
+      for (const id of ids) get().duplicate(id);
+    },
+
     undoRemove() {
+      if (lastDeletedMany) {
+        const batch = lastDeletedMany;
+        lastDeletedMany = null;
+        let scripts = get().scripts;
+        if (scripts.length === 1 && scripts[0].wordCount === 0) scripts = [];
+        const next = scripts.slice();
+        for (const { script, index } of batch) next.splice(Math.min(index, next.length), 0, script);
+        set({ scripts: next, selectedIds: batch.map((b) => b.script.id) });
+        get().select(batch[0].script.id);
+        set({ selectedIds: batch.map((b) => b.script.id) });
+        get().dismissBanner();
+        return;
+      }
+      return get()._undoSingle();
+    },
+
+    _undoSingle() {
       if (!lastDeleted) return;
       const { script, index } = lastDeleted;
       lastDeleted = null;
@@ -470,6 +558,19 @@ export const useStore = create<State & Actions>()((set, get) => {
       set((st) => ({ settings: { ...st.settings, ...DEFAULT_COLORS } }));
     },
 
+    moveInspectorBlock(from, to) {
+      if (from === to) return;
+      const order = get().settings.inspectorOrder;
+      const movingDown = order.indexOf(from) < order.indexOf(to);
+      const next = order.filter((id) => id !== from);
+      next.splice(next.indexOf(to) + (movingDown ? 1 : 0), 0, from);
+      set((st) => ({ settings: { ...st.settings, inspectorOrder: next } }));
+    },
+
+    resetInspectorOrder() {
+      set((st) => ({ settings: { ...st.settings, inspectorOrder: [...INSPECTOR_BLOCKS] } }));
+    },
+
     async loadFonts() {
       const cached = get().fonts;
       if (cached) return cached;
@@ -498,7 +599,9 @@ export const useStore = create<State & Actions>()((set, get) => {
       const applied: Partial<Settings> = {};
       for (const k of PROJECT_SETTING_KEYS) {
         const v = (tpl.settings as unknown as Record<string, unknown>)[k];
-        if (v !== undefined && typeof v === typeof DEFAULT_SETTINGS[k]) (applied as Record<string, unknown>)[k] = v;
+        if (v === undefined) continue;
+        if (k === 'inspectorOrder') applied.inspectorOrder = sanitizeInspectorOrder(v);
+        else if (typeof v === typeof DEFAULT_SETTINGS[k]) (applied as Record<string, unknown>)[k] = v;
       }
       set((st) => ({ settings: { ...st.settings, ...applied } }));
       get().showBanner(t('templateApplied', { name: tpl.name }));
@@ -578,7 +681,7 @@ export const useStore = create<State & Actions>()((set, get) => {
     },
 
     paragraph(direction) {
-      const stops = stopsProvider?.() ?? [0];
+      const stops = previewMetrics?.stops() ?? [0];
       const p = get().progressNow();
       if (direction > 0) {
         const next = stops.find((s) => s > p + 0.002);
@@ -587,6 +690,11 @@ export const useStore = create<State & Actions>()((set, get) => {
         const prev = [...stops].reverse().find((s) => s < p - 0.01);
         get().jump(prev ?? 0);
       }
+    },
+
+    jumpToOffset(offset) {
+      const p = previewMetrics?.progressForOffset(offset);
+      if (p !== null && p !== undefined) get().jump(p);
     },
 
     runClicker(action) {
@@ -690,7 +798,9 @@ export const useStore = create<State & Actions>()((set, get) => {
       const applied: Partial<Settings> = {};
       for (const k of PROJECT_SETTING_KEYS) {
         const v = (ps as Record<string, unknown>)[k];
-        if (v !== undefined && typeof v === typeof DEFAULT_SETTINGS[k]) (applied as Record<string, unknown>)[k] = v;
+        if (v === undefined) continue;
+        if (k === 'inspectorOrder') applied.inspectorOrder = sanitizeInspectorOrder(v);
+        else if (typeof v === typeof DEFAULT_SETTINGS[k]) (applied as Record<string, unknown>)[k] = v;
       }
       set((st) => ({ settings: { ...st.settings, ...applied } }));
 

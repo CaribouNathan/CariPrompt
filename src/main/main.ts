@@ -268,7 +268,9 @@ function ensureOutputWindow(): BrowserWindow {
     fullscreenable: !isMac,
     skipTaskbar: true,
     hasShadow: false,
-    focusable: false,
+    // Sur macOS, une fenêtre non focusable devient un panneau non activant :
+    // l'application disparaîtrait de Cmd+Tab et de la barre de menus.
+    focusable: isMac ? true : false,
     backgroundColor: '#000000',
     enableLargerThanScreen: true,
     title: t('outputWindowTitle'),
@@ -300,7 +302,12 @@ function placeOutput(displayId: number) {
   if (!isMac && outputWindow.isFullScreen()) outputWindow.setFullScreen(false);
   outputWindow.setBounds(display.bounds);
   if (isMac) {
-    outputWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // skipTransformProcessType : sans cette option, l'app quitte le Dock,
+    // Cmd+Tab et la barre de menus dès l'affichage de la sortie.
+    outputWindow.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+      skipTransformProcessType: true,
+    });
     // Au-dessus de la barre des menus sur un écran dédié ; niveau normal sur l'écran opérateur
     outputWindow.setAlwaysOnTop(!shared, 'screen-saver');
   } else {
@@ -314,6 +321,10 @@ function showOutput(displayId: number) {
   outputDisplayId = displayId;
   placeOutput(displayId);
   win.showInactive();
+  win.setFocusable(false);
+  // La fenêtre opérateur reste au premier plan et l'app garde sa barre de menus
+  if (isMac) app.focus({ steal: true });
+  mainWindow?.focus();
   mainWindow?.webContents.send('output:active', true);
 }
 
@@ -379,7 +390,7 @@ function fileItems(): MenuItemConstructorOptions[] {
 
 function prompterItems(): MenuItemConstructorOptions[] {
   return [
-    cmdItem('playPause', 'Space', 'togglePlay'),
+    cmdItem('playPause', 'Alt+Space', 'togglePlay'),
     cmdItem('rewind', 'CmdOrCtrl+R', 'rewind'),
     { type: 'separator' },
     cmdItem('toggleOutput', 'CmdOrCtrl+Shift+D', 'toggleOutput'),
@@ -585,15 +596,16 @@ function registerIpc() {
     mainWindow?.webContents.send('output:input', input);
   });
 
-  ipcMain.handle('menu:script', async (_e, canDelete: boolean) => {
+  ipcMain.handle('menu:script', async (_e, count: number) => {
     if (!mainWindow) return null;
+    const suffix = count > 1 ? ` (${count})` : '';
     return new Promise<string | null>((resolve) => {
       let chosen: string | null = null;
       const menu = Menu.buildFromTemplate([
-        { label: t('duplicate'), click: () => { chosen = 'duplicate'; } },
-        { label: t('exportDots'), click: () => { chosen = 'export'; } },
+        { label: t('duplicate') + suffix, click: () => { chosen = 'duplicate'; } },
+        { label: t('exportDots'), enabled: count === 1, click: () => { chosen = 'export'; } },
         { type: 'separator' },
-        { label: t('delete'), enabled: canDelete, click: () => { chosen = 'delete'; } },
+        { label: t('delete') + suffix, click: () => { chosen = 'delete'; } },
       ]);
       menu.popup({ window: mainWindow!, callback: () => setTimeout(() => resolve(chosen), 0) });
     });

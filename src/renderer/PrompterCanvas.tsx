@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { toSegments } from '../shared/marks';
+import type { PreviewMetrics } from './store';
 import { chronoAt, formatDuration, progressAt, type Mirror, type OutputState } from '../shared/types';
 
 const MIRROR_TRANSFORM: Record<Mirror, string> = {
@@ -21,8 +22,8 @@ interface Props {
   width: number;
   height: number;
   mirror: Mirror;
-  /** Fournit les positions des paragraphes (aperçu opérateur uniquement) */
-  onStopsProvider?: (fn: (() => number[]) | null) => void;
+  /** Fournit les mesures de mise en page (aperçu opérateur uniquement) */
+  onMetrics?: (m: PreviewMetrics | null) => void;
 }
 
 /**
@@ -30,7 +31,7 @@ interface Props {
  * Défilement et timecode sont appliqués directement au DOM à chaque image
  * (requestAnimationFrame), sans passer par React.
  */
-export function PrompterCanvas({ state, width, height, mirror, onStopsProvider }: Props) {
+export function PrompterCanvas({ state, width, height, mirror, onMetrics }: Props) {
   const textRef = useRef<HTMLDivElement>(null);
   const elapsedRef = useRef<HTMLSpanElement>(null);
   const remainingRef = useRef<HTMLSpanElement>(null);
@@ -83,14 +84,18 @@ export function PrompterCanvas({ state, width, height, mirror, onStopsProvider }
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Débuts de paragraphes, mesurés dans la mise en page réelle
+  // Mesures de la mise en page réelle : paragraphes et position d'un caractère
   useEffect(() => {
-    if (!onStopsProvider) return;
-    onStopsProvider(() => {
+    if (!onMetrics) return;
+    const measure = () => {
       const el = textRef.current;
       const text = stateRef.current.text;
-      if (!el) return [0];
-      // Le texte peut être découpé en plusieurs nœuds (styles partiels)
+      if (!el) return null;
+      const box = el.getBoundingClientRect();
+      const scale = el.offsetHeight > 0 ? box.height / el.offsetHeight : 1;
+      const flipped = mirrorRef.current === 'vertical' || mirrorRef.current === 'both';
+      const st = stateRef.current.style;
+      const travel = Math.max(el.offsetHeight - st.fontSize * st.lineHeight, 1);
       const nodes: Text[] = [];
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
       for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n as Text);
@@ -101,33 +106,42 @@ export function PrompterCanvas({ state, width, height, mirror, onStopsProvider }
           if (offset < total + len) return { node: n, offset: offset - total };
           total += len;
         }
-        return null;
+        const last = nodes[nodes.length - 1];
+        return last ? { node: last, offset: Math.max((last.nodeValue?.length ?? 1) - 1, 0) } : null;
       };
-      const box = el.getBoundingClientRect();
-      const scale = el.offsetHeight > 0 ? box.height / el.offsetHeight : 1;
-      const flipped = mirrorRef.current === 'vertical' || mirrorRef.current === 'both';
-      const st = stateRef.current.style;
-      const travel = Math.max(el.offsetHeight - st.fontSize * st.lineHeight, 1);
-      const stops = [0];
-      const range = document.createRange();
-      const re = /\n\s*\n+/g;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(text))) {
-        const idx = m.index + m[0].length;
-        if (idx >= text.length) break;
-        const pos = locate(idx);
-        if (!pos) continue;
+      const progressAtOffset = (offset: number): number | null => {
+        const pos = locate(Math.max(0, Math.min(offset, text.length - 1)));
+        if (!pos) return null;
+        const range = document.createRange();
         range.setStart(pos.node, pos.offset);
         range.setEnd(pos.node, Math.min(pos.offset + 1, pos.node.nodeValue?.length ?? 0));
         const r = range.getClientRects()[0];
-        if (!r) continue;
-        const offset = (flipped ? box.bottom - r.bottom : r.top - box.top) / scale;
-        stops.push(Math.min(Math.max(offset / travel, 0), 1));
-      }
-      return stops;
+        if (!r) return null;
+        const top = (flipped ? box.bottom - r.bottom : r.top - box.top) / scale;
+        return Math.min(Math.max(top / travel, 0), 1);
+      };
+      return { text, progressAtOffset };
+    };
+
+    onMetrics({
+      progressForOffset: (offset) => measure()?.progressAtOffset(offset) ?? null,
+      stops: () => {
+        const m = measure();
+        if (!m) return [0];
+        const stops = [0];
+        const re = /\n\s*\n+/g;
+        let match: RegExpExecArray | null;
+        while ((match = re.exec(m.text))) {
+          const idx = match.index + match[0].length;
+          if (idx >= m.text.length) break;
+          const p = m.progressAtOffset(idx);
+          if (p !== null) stops.push(p);
+        }
+        return stops;
+      },
     });
-    return () => onStopsProvider(null);
-  }, [onStopsProvider]);
+    return () => onMetrics(null);
+  }, [onMetrics]);
 
   const lineY = height * style.readingLine;
   const marginPx = width * style.margin;

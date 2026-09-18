@@ -4,6 +4,33 @@ export type Mirror = 'none' | 'horizontal' | 'vertical' | 'both';
 export type TextAlign = 'left' | 'center';
 
 export type TimecodeMode = 'off' | 'elapsed' | 'remaining' | 'both';
+export type WheelMode = 'navigate' | 'speed';
+
+/** Blocs du panneau de réglages, dans leur ordre par défaut */
+export type InspectorBlockId =
+  | 'templates' | 'speed' | 'target' | 'typography' | 'colors'
+  | 'layout' | 'timecode' | 'output' | 'clicker' | 'controls';
+
+export const INSPECTOR_BLOCKS: InspectorBlockId[] = [
+  'templates', 'speed', 'target', 'typography', 'colors',
+  'layout', 'timecode', 'output', 'clicker', 'controls',
+];
+
+/** Ordre valide : identifiants connus, sans doublon, complété par les blocs manquants */
+export function sanitizeInspectorOrder(value: unknown): InspectorBlockId[] {
+  const seen = new Set<string>();
+  const out: InspectorBlockId[] = [];
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      if (typeof v === 'string' && (INSPECTOR_BLOCKS as string[]).includes(v) && !seen.has(v)) {
+        seen.add(v);
+        out.push(v as InspectorBlockId);
+      }
+    }
+  }
+  for (const id of INSPECTOR_BLOCKS) if (!seen.has(id)) out.push(id);
+  return out;
+}
 export type ClickerAction =
   | 'playPause' | 'faster' | 'slower' | 'forward10' | 'back10'
   | 'nextParagraph' | 'prevParagraph' | 'rewind' | 'none';
@@ -57,15 +84,19 @@ export interface ProjectSettings {
   countdownEnabled: boolean;
   timecode: TimecodeMode;
   invertScroll: boolean;
+  /** Molette au-dessus de l'aperçu : navigation dans le texte ou réglage de la vitesse */
+  wheelPreview: WheelMode;
   clickerNext: ClickerAction;
   clickerPrev: ClickerAction;
+  /** Ordre des blocs du panneau de réglages */
+  inspectorOrder: InspectorBlockId[];
 }
 
 export const PROJECT_SETTING_KEYS: Array<keyof ProjectSettings> = [
   'fontSize', 'fontFamily', 'fontWeight', 'italic', 'uppercase', 'textColor', 'backgroundColor',
   'markerColor', 'lineHeight', 'margin', 'alignment', 'readingLine', 'showReadingLine', 'mirror',
-  'mirrorPreview', 'mirrorFullscreen', 'countdownEnabled', 'timecode', 'invertScroll',
-  'clickerNext', 'clickerPrev',
+  'mirrorPreview', 'mirrorFullscreen', 'countdownEnabled', 'timecode', 'invertScroll', 'wheelPreview',
+  'clickerNext', 'clickerPrev', 'inspectorOrder',
 ];
 
 /** Jeu de réglages enregistré sous un nom (« iPad CACE »…) */
@@ -179,6 +210,7 @@ export interface ForwardedInput {
   kind: 'key' | 'wheel';
   key?: string;
   code?: string;
+  alt?: boolean;
   deltaY?: number;
   deltaMode?: number;
 }
@@ -192,7 +224,7 @@ export const DEFAULT_SPEED = 35;
 export const LINE_HEIGHT_MIN = 1;
 export const LINE_HEIGHT_MAX = 2.5;
 export const FONT_MIN = 24;
-export const FONT_MAX = 220;
+export const FONT_MAX = 400;
 export const FONT_STEP = 4;
 export const SEEK_STEP = 10;
 export const DEFAULT_LINE_HEIGHT = 1.45;

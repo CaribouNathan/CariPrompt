@@ -3,6 +3,7 @@
   --accent: #007aff;
   --accent-hover: #0068d9;
   --green: #28cd41;
+  --red: #ff3b30;
   --orange: #ff9500;
   --label: #1d1d1f;
   --label-2: rgba(60, 60, 67, 0.72);
@@ -28,6 +29,7 @@
     --accent: #0a84ff;
     --accent-hover: #409cff;
     --green: #32d74b;
+    --red: #ff453a;
     --orange: #ff9f0a;
     --label: #f5f5f7;
     --label-2: rgba(235, 235, 245, 0.66);
@@ -209,6 +211,7 @@ svg { flex-shrink: 0; }
 }
 .script-row:hover { background: var(--hover); }
 .script-row.selected { background: var(--selection); }
+.script-row.current { box-shadow: inset 2px 0 0 var(--accent); }
 .script-icon { color: var(--accent); }
 .script-meta { min-width: 0; }
 .script-title {
@@ -510,11 +513,31 @@ input[type='range']::-webkit-slider-thumb {
 
 .group { margin-bottom: 18px; }
 .group h3 {
-  margin: 0 0 6px 4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 6px 0;
+  padding: 2px 4px;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   color: var(--label-2);
+  cursor: grab;
 }
+.group h3:active { cursor: grabbing; }
+.group h3:hover { background: var(--hover); }
+.drag-handle {
+  display: inline-flex;
+  color: var(--label-3);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.group h3:hover .drag-handle { opacity: 1; }
+.group.dragging { opacity: 0.4; }
+.group.drag-above { box-shadow: 0 -2px 0 var(--accent); }
+.group.drag-below { box-shadow: 0 2px 0 var(--accent); }
+.order-note { padding: 4px 4px 24px; line-height: 1.45; }
+.order-note .link-btn { padding: 0; }
 .group-card {
   background: var(--card);
   border: 1px solid var(--separator);
@@ -654,6 +677,10 @@ strong.num { color: var(--label); font-weight: 600; }
   font-weight: 500;
 }
 .push-btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+.push-btn.danger { background: var(--red); border-color: transparent; color: #fff; font-weight: 600; }
+.push-btn.danger:hover { filter: brightness(1.08); }
+.tool-btn.danger { color: var(--red); }
+.tool-btn.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
 .push-btn:disabled { opacity: 0.4; }
 
 .shortcuts {

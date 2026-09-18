@@ -10,7 +10,7 @@ const isTextField = (el: EventTarget | null): boolean => {
 };
 
 /** Commande prompteur à partir d'une touche. Retourne true si la touche a été traitée. */
-function handlePrompterKey(key: string, code: string): boolean {
+function handlePrompterKey(key: string, code: string, alt = false): boolean {
   const s = useStore.getState();
   switch (code) {
     // Télécommandes de présentation (PowerPoint)
@@ -18,7 +18,8 @@ function handlePrompterKey(key: string, code: string): boolean {
     case 'PageUp': s.runClicker(s.settings.clickerPrev); return true;
     case 'F5': if (!s.playback.isPlaying) s.play(); return true; // « démarrer le diaporama »
     case 'KeyB': case 'Period': case 'NumpadDecimal': s.toggleBlackout(); return true;
-    case 'Space': s.togglePlay(); return true;
+    // ⌥ + Espace : lecture / pause. Espace seul est absorbé, sans effet ni bip.
+    case 'Space': if (alt) s.togglePlay(); return true;
     case 'ArrowDown': s.adjustSpeed(+1); return true;   // bas → plus vite
     case 'ArrowUp': s.adjustSpeed(-1); return true;     // haut → moins vite
     case 'ArrowLeft': s.seek(-SEEK_STEP); return true;
@@ -39,21 +40,23 @@ function handlePrompterKey(key: string, code: string): boolean {
 let accumulator = 0;
 let lastStepAt = 0;
 
-function handleWheel(deltaY: number, deltaMode: number) {
+/** Valeur positive = geste physique vers le bas, quel que soit le réglage système */
+function normalizeDelta(deltaY: number): number {
   const s = useStore.getState();
-  // Valeur positive = geste physique vers le bas.
-  // macOS avec défilement naturel inverse le signe de deltaY.
   let dy = s.info.platform === 'darwin' && s.info.naturalScroll ? -deltaY : deltaY;
   if (s.settings.invertScroll) dy = -dy;
+  return dy;
+}
 
+/** Réglage de la vitesse par paliers */
+function wheelSpeed(deltaY: number, deltaMode: number) {
+  const dy = normalizeDelta(deltaY);
   const now = performance.now();
   let steps = 0;
   if (deltaMode !== 0 || Math.abs(dy) >= 50) {
-    // Cran de molette : un palier par cran
     steps = Math.sign(dy);
     accumulator = 0;
   } else {
-    // Trackpad : accumulation, cadence limitée pour absorber l'inertie
     if (now - lastStepAt > 400) accumulator = 0;
     accumulator += dy;
     if (Math.abs(accumulator) >= 30 && now - lastStepAt > 60) {
@@ -63,8 +66,15 @@ function handleWheel(deltaY: number, deltaMode: number) {
   }
   if (steps !== 0) {
     lastStepAt = now;
-    s.adjustSpeed(steps);
+    useStore.getState().adjustSpeed(steps);
   }
+}
+
+/** Navigation dans le texte : environ 3 secondes pour un cran de molette */
+function wheelNavigate(deltaY: number, deltaMode: number) {
+  const dy = normalizeDelta(deltaY);
+  const pixels = deltaMode === 0 ? dy : dy * 40;
+  useStore.getState().seek(pixels * 0.03);
 }
 
 // MARK: - Opérateur
@@ -76,6 +86,15 @@ export function installOperatorInput() {
     const s = useStore.getState();
     const editing = isTextField(e.target);
     const mod = isMac ? e.metaKey : e.ctrlKey;
+
+    // ⌥ + Espace agit partout, y compris dans une zone de saisie :
+    // le modificateur rend le geste volontaire, et empêche l'insertion
+    // d'une espace insécable sur macOS ou l'ouverture du menu système sur Windows.
+    if (e.code === 'Space' && e.altKey && !e.metaKey && !e.ctrlKey) {
+      s.togglePlay();
+      e.preventDefault();
+      return;
+    }
 
     if (mod && !e.altKey) {
       const k = e.key.toLowerCase();
@@ -111,7 +130,7 @@ export function installOperatorInput() {
     }
     if (editing) return;
 
-    if (handlePrompterKey(e.key, e.code)) e.preventDefault();
+    if (handlePrompterKey(e.key, e.code, e.altKey)) e.preventDefault();
     else if (e.key === 'Tab' || e.key === 'Enter') e.preventDefault();
   });
 
@@ -119,9 +138,15 @@ export function installOperatorInput() {
     'wheel',
     (e) => {
       const target = e.target as HTMLElement | null;
-      if (target?.closest('[data-scroll], textarea, select')) return;
+      // Zones à défilement natif : éditeur, liste des textes, réglages
+      if (target?.closest('[data-scroll], textarea, select, .editor-text')) return;
       e.preventDefault();
-      handleWheel(e.deltaY, e.deltaMode);
+      const overPreview = !!target?.closest('[data-prompter-wheel]');
+      const mode = useStore.getState().settings.wheelPreview;
+      // ⌥ inverse l'action réglée
+      const navigate = overPreview && ((mode === 'navigate') !== e.altKey);
+      if (navigate) wheelNavigate(e.deltaY, e.deltaMode);
+      else wheelSpeed(e.deltaY, e.deltaMode);
     },
     { passive: false },
   );
@@ -134,8 +159,8 @@ export function installOperatorInput() {
 
   // Entrées reçues de la fenêtre de sortie
   api.onOutputInput((input: ForwardedInput) => {
-    if (input.kind === 'key') handlePrompterKey(input.key ?? '', input.code ?? '');
-    else handleWheel(input.deltaY ?? 0, input.deltaMode ?? 0);
+    if (input.kind === 'key') handlePrompterKey(input.key ?? '', input.code ?? '', !!input.alt);
+    else wheelSpeed(input.deltaY ?? 0, input.deltaMode ?? 0);
   });
 
   api.onMenu((cmd) => {
@@ -161,7 +186,7 @@ export function installOperatorInput() {
 export function installOutputInput() {
   window.addEventListener('keydown', (e) => {
     e.preventDefault();
-    api.forwardInput({ kind: 'key', key: e.key, code: e.code });
+    api.forwardInput({ kind: 'key', key: e.key, code: e.code, alt: e.altKey });
   });
   window.addEventListener(
     'wheel',
