@@ -5,6 +5,10 @@
 <h1 align="center">CariPrompt</h1>
 
 <p align="center">
+  Français | <a href="README.en.md">English</a>
+</p>
+
+<p align="center">
   Prompteur multi-écrans moderne, pour macOS, Windows et Linux.<br>
   <strong>Gratuit et open source</strong> — un outil <a href="https://github.com/CaribouNathan">Caribou Labs</a>.
 </p>
