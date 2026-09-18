@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  Prompteur multi-écrans moderne, pour macOS, Windows et Linux.<br>
+  Prompteur multi-écrans complet et moderne, pour macOS, Windows et Linux.<br>
   <strong>Gratuit et open source</strong> — un outil <a href="https://github.com/CaribouNathan">Caribou Labs</a>.
 </p>
 
