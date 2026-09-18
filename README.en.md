@@ -5,6 +5,10 @@
 <h1 align="center">CariPrompt</h1>
 
 <p align="center">
+  <a href="README.md">Français</a> | English
+</p>
+
+<p align="center">
   A simple, modern multi-screen teleprompter for macOS, Windows, and Linux.<br>
   <strong>Free and open source</strong> — a <a href="https://github.com/CaribouNathan">Caribou Labs</a> tool.
 </p>
