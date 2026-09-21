@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { toSegments } from '../shared/marks';
 import type { PreviewMetrics } from './store';
-import { chronoAt, formatDuration, progressAt, type Mirror, type OutputState } from '../shared/types';
+import {
+  chronoAt, formatDuration, progressAt, type CoachHintKind, type Mirror, type OutputState,
+} from '../shared/types';
+import { tr, type Lang, type StringKey } from '../shared/i18n';
 
 const MIRROR_TRANSFORM: Record<Mirror, string> = {
   none: 'none',
@@ -17,8 +20,18 @@ export function fontStack(family: string): string {
   return family ? `"${family.replace(/"/g, '')}", ${SYSTEM_FONT_STACK}` : SYSTEM_FONT_STACK;
 }
 
+const HINT_KEY: Record<CoachHintKind, StringKey> = {
+  good: 'hintGood',
+  slowDown: 'hintSlowDown',
+  speedUp: 'hintSpeedUp',
+  paused: 'hintPaused',
+  silent: 'hintSilent',
+  skipped: 'hintSkipped',
+};
+
 interface Props {
   state: OutputState;
+  lang: Lang;
   width: number;
   height: number;
   mirror: Mirror;
@@ -31,7 +44,7 @@ interface Props {
  * Défilement et timecode sont appliqués directement au DOM à chaque image
  * (requestAnimationFrame), sans passer par React.
  */
-export function PrompterCanvas({ state, width, height, mirror, onMetrics }: Props) {
+export function PrompterCanvas({ state, lang, width, height, mirror, onMetrics }: Props) {
   const textRef = useRef<HTMLDivElement>(null);
   const elapsedRef = useRef<HTMLSpanElement>(null);
   const remainingRef = useRef<HTMLSpanElement>(null);
@@ -74,7 +87,7 @@ export function PrompterCanvas({ state, width, height, mirror, onMetrics }: Prop
       }
       if (st.style.timecode !== 'off') {
         const e = formatDuration(chronoAt(st.playback, now));
-        const r = `−${formatDuration((1 - p) * st.playback.totalDuration)}`;
+        const r = `−${formatDuration((1 - p) * (st.playback.displayDuration ?? st.playback.totalDuration))}`;
         if (elapsedRef.current && elapsedRef.current.textContent !== e) elapsedRef.current.textContent = e;
         if (remainingRef.current && remainingRef.current.textContent !== r) remainingRef.current.textContent = r;
       }
@@ -225,6 +238,18 @@ export function PrompterCanvas({ state, width, height, mirror, onMetrics }: Prop
           >
             <span key={cd} style={{ fontSize: cdSize * 0.6 }}>{cd}</span>
           </div>
+        </div>
+      )}
+
+      {state.recording && <div className="canvas-rec" style={{ fontSize: tcSize * 0.7 }}>REC</div>}
+
+      {state.hint && (
+        <div
+          key={state.hint.at}
+          className={`canvas-hint hint-${state.hint.kind}`}
+          style={{ fontSize: Math.max(14, tcSize * 0.62) }}
+        >
+          {tr(lang, HINT_KEY[state.hint.kind])}
         </div>
       )}
 

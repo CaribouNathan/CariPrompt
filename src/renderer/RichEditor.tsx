@@ -118,6 +118,9 @@ interface Props {
   /** Clic dans le texte : position du curseur, pour se caler dans l'aperçu */
   onCaretClick: (offset: number) => void;
   onFocusChange: (focused: boolean) => void;
+  /** Position de curseur à appliquer une fois, après une annulation */
+  caretHint?: number | null;
+  onCaretConsumed?: () => void;
 }
 
 /**
@@ -127,6 +130,7 @@ interface Props {
  */
 export function RichEditor({
   scriptId, text, marks, placeholder, onChange, onSelectionChange, onCaretClick, onFocusChange,
+  caretHint, onCaretConsumed,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const lastParsed = useRef('');
@@ -148,9 +152,15 @@ export function RichEditor({
     if (!root) return;
     const signature = JSON.stringify([text, marks]);
     if (signature === lastParsed.current) return;
-    const sel = readSelection();
+    const sel = caretHint !== null && caretHint !== undefined
+      ? { start: caretHint, end: caretHint }
+      : readSelection();
     root.innerHTML = buildHtml(text, marks);
     lastParsed.current = signature;
+    if (caretHint !== null && caretHint !== undefined) {
+      root.focus();
+      onCaretConsumed?.();
+    }
     if (sel && document.activeElement === root) {
       const range = document.createRange();
       const a = nodeAt(root, Math.min(sel.start, text.length));
@@ -161,7 +171,7 @@ export function RichEditor({
       s?.removeAllRanges();
       s?.addRange(range);
     }
-  }, [text, marks, scriptId, readSelection]);
+  }, [text, marks, scriptId, readSelection, caretHint, onCaretConsumed]);
 
   useEffect(() => {
     const onSelChange = () => {

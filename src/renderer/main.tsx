@@ -20,6 +20,11 @@ if (isOutput) {
     document.title = `CariPrompt ${info.version}`;
     installOperatorInput();
     startSync();
+    useStore.getState().loadTakes().catch(() => undefined);
+    // Mise à jour : une seule requête, en arrière-plan, et seulement si l'option est active
+    if (settings.updateCheck) {
+      window.setTimeout(() => useStore.getState().checkUpdate(true).catch(() => undefined), 4000);
+    }
     window.cari.onFlushRequest(async () => {
       try {
         await useStore.getState().flush();

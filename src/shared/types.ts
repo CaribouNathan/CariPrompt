@@ -6,30 +6,138 @@ export type TextAlign = 'left' | 'center';
 export type TimecodeMode = 'off' | 'elapsed' | 'remaining' | 'both';
 export type WheelMode = 'navigate' | 'speed';
 
-/** Blocs du panneau de réglages, dans leur ordre par défaut */
+// MARK: - Prises
+
+export interface TakeMarker {
+  id: string;
+  /** Secondes depuis le début de la prise */
+  time: number;
+  label: string;
+}
+
+/** Analyse du signal, sans reconnaissance vocale */
+export interface TakeAnalysis {
+  /** Débit estimé en mots/min, déduit des attaques syllabiques */
+  speechRate: number;
+  /** Nombre de pauses de plus de 0,4 s */
+  pauses: number;
+  /** Durée cumulée des silences, en secondes */
+  silence: number;
+  /** Part de la prise passée à parler, 0–1 */
+  speaking: number;
+  /** Écart moyen entre le débit parlé et la vitesse du prompteur, en % */
+  drift: number;
+  /** Irrégularité du débit : écart-type relatif, en % */
+  irregularity: number;
+}
+
+export interface Take {
+  id: string;
+  name: string;
+  /** Nom automatique « PRISE 01 » tant qu'il n'a pas été renommé */
+  autoName: boolean;
+  createdAt: string;
+  duration: number;
+  /** Nom du fichier audio dans le dossier takes/ */
+  file: string;
+  scriptId: string | null;
+  scriptTitle: string;
+  /** Position dans le script au début et à la fin de la prise, 0–1 */
+  startProgress: number;
+  endProgress: number;
+  speed: number;
+  note: string;
+  markers: TakeMarker[];
+  locked: boolean;
+  analysis: TakeAnalysis | null;
+  /** Transcription locale, absente tant que la prise n'a pas été transcrite */
+  transcript?: Transcript | null;
+  /** Sous-titres, éditables ; recalculés depuis la transcription à la demande */
+  subtitles?: SubtitleCue[] | null;
+  /** Analyse du discours : transcription comparée au texte */
+  speech?: SpeechAnalysis | null;
+}
+
+export interface AudioDeviceInfo {
+  id: string;
+  label: string;
+}
+
+/** Indication discrète affichée au présentateur */
+export type CoachHintKind = 'good' | 'slowDown' | 'speedUp' | 'paused' | 'silent' | 'skipped';
+
+export interface CoachHint {
+  kind: CoachHintKind;
+  /** Horodatage d'apparition, pour la disparition automatique */
+  at: number;
+}
+
+export const PAUSE_THRESHOLD = 0.4;
+export const TAKE_EXT = 'wav';
+
+/** Blocs du panneau de réglages */
 export type InspectorBlockId =
-  | 'templates' | 'speed' | 'target' | 'typography' | 'colors'
-  | 'layout' | 'timecode' | 'output' | 'clicker' | 'controls';
+  | 'speed' | 'target' | 'typography' | 'colors'
+  | 'layout' | 'timecode' | 'output' | 'takes' | 'transcription' | 'ai' | 'clicker' | 'controls';
 
-export const INSPECTOR_BLOCKS: InspectorBlockId[] = [
-  'templates', 'speed', 'target', 'typography', 'colors',
-  'layout', 'timecode', 'output', 'clicker', 'controls',
-];
+/** Onglets du panneau de réglages ; « custom » est libre, les autres ont des blocs attitrés */
+export type InspectorTabId = 'essentials' | 'layout' | 'transcript' | 'aitools' | 'custom';
+export const INSPECTOR_TABS: InspectorTabId[] = ['essentials', 'layout', 'transcript', 'aitools', 'custom'];
 
-/** Ordre valide : identifiants connus, sans doublon, complété par les blocs manquants */
-export function sanitizeInspectorOrder(value: unknown): InspectorBlockId[] {
-  const seen = new Set<string>();
-  const out: InspectorBlockId[] = [];
-  if (Array.isArray(value)) {
-    for (const v of value) {
-      if (typeof v === 'string' && (INSPECTOR_BLOCKS as string[]).includes(v) && !seen.has(v)) {
-        seen.add(v);
-        out.push(v as InspectorBlockId);
-      }
+/** Répartition par défaut ; l'onglet personnalisé démarre vide */
+export const DEFAULT_LAYOUT: Record<InspectorTabId, InspectorBlockId[]> = {
+  essentials: ['output', 'speed', 'target', 'controls', 'clicker'],
+  layout: ['typography', 'colors', 'layout', 'timecode'],
+  transcript: ['takes', 'transcription'],
+  aitools: ['ai'],
+  custom: [],
+};
+
+export const INSPECTOR_BLOCKS: InspectorBlockId[] = INSPECTOR_TABS.flatMap((tab) => DEFAULT_LAYOUT[tab]);
+
+/** Onglet d'origine d'un bloc */
+export function homeTab(id: InspectorBlockId): InspectorTabId {
+  return INSPECTOR_TABS.find((tab) => DEFAULT_LAYOUT[tab].includes(id)) ?? 'custom';
+}
+
+export type InspectorLayout = Record<InspectorTabId, InspectorBlockId[]>;
+
+/** Disposition valide : blocs connus, sans doublon, chaque onglet fixe complété par les siens */
+export function sanitizeLayout(value: unknown): InspectorLayout {
+  const src = (value ?? {}) as Record<string, unknown>;
+  const read = (tab: InspectorTabId, allowed: (id: InspectorBlockId) => boolean): InspectorBlockId[] => {
+    const seen = new Set<InspectorBlockId>();
+    const list = Array.isArray(src[tab]) ? (src[tab] as unknown[]) : [];
+    for (const v of list) {
+      const id = v as InspectorBlockId;
+      if (typeof v === 'string' && INSPECTOR_BLOCKS.includes(id) && allowed(id)) seen.add(id);
     }
+    return [...seen];
+  };
+  const out = {} as InspectorLayout;
+  for (const tab of INSPECTOR_TABS) {
+    if (tab === 'custom') { out.custom = read('custom', () => true); continue; }
+    const kept = read(tab, (id) => homeTab(id) === tab);
+    for (const id of DEFAULT_LAYOUT[tab]) if (!kept.includes(id)) kept.push(id);
+    out[tab] = kept;
   }
-  for (const id of INSPECTOR_BLOCKS) if (!seen.has(id)) out.push(id);
   return out;
+}
+
+export function isInspectorTab(v: unknown): v is InspectorTabId {
+  return typeof v === 'string' && (INSPECTOR_TABS as string[]).includes(v);
+}
+
+/** Blocs repliés, repérés par « onglet:bloc » */
+export function sanitizeCollapsed(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const keys = new Set<string>();
+  for (const v of value) {
+    if (typeof v !== 'string') continue;
+    const [tab, block] = v.split(':');
+    if (isInspectorTab(tab) && INSPECTOR_BLOCKS.includes(block as InspectorBlockId)) keys.add(v);
+  }
+  return [...keys];
 }
 export type ClickerAction =
   | 'playPause' | 'faster' | 'slower' | 'forward10' | 'back10'
@@ -61,6 +169,8 @@ export interface Script {
   targetDuration: number; // secondes
   createdAt: string;
   updatedAt: string;
+  /** Langue du texte quand elle est connue (scripts de test fournis) : drapeau dans la liste */
+  lang?: Lang;
 }
 
 /** Réglages d'affichage et de pilotage : ceux enregistrés dans un projet .cariprompt */
@@ -88,15 +198,19 @@ export interface ProjectSettings {
   wheelPreview: WheelMode;
   clickerNext: ClickerAction;
   clickerPrev: ClickerAction;
-  /** Ordre des blocs du panneau de réglages */
-  inspectorOrder: InspectorBlockId[];
+  /** Répartition et ordre des blocs dans les onglets du panneau de réglages */
+  inspectorLayout: InspectorLayout;
+  /** Blocs repliés, repérés par « onglet:bloc » */
+  collapsedBlocks: string[];
+  /** Indications de rythme pendant la prise */
+  coachEnabled: boolean;
 }
 
 export const PROJECT_SETTING_KEYS: Array<keyof ProjectSettings> = [
   'fontSize', 'fontFamily', 'fontWeight', 'italic', 'uppercase', 'textColor', 'backgroundColor',
   'markerColor', 'lineHeight', 'margin', 'alignment', 'readingLine', 'showReadingLine', 'mirror',
   'mirrorPreview', 'mirrorFullscreen', 'countdownEnabled', 'timecode', 'invertScroll', 'wheelPreview',
-  'clickerNext', 'clickerPrev', 'inspectorOrder',
+  'clickerNext', 'clickerPrev', 'inspectorLayout', 'collapsedBlocks', 'coachEnabled',
 ];
 
 /** Jeu de réglages enregistré sous un nom (« iPad CACE »…) */
@@ -109,6 +223,16 @@ export interface Template {
 
 export interface Settings extends ProjectSettings {
   templates: Template[];
+  /** Micro choisi ; propre à la machine, donc hors préréglages */
+  micDeviceId: string;
+  /** Fournisseur d'IA et modèle retenu pour chacun ; hors préréglages */
+  aiProvider: AiProvider;
+  aiModels: Record<AiProvider, string>;
+  /** Dernière langue cible choisie pour la traduction */
+  aiTarget: string;
+  /** Modèle Whisper choisi et transcription automatique après chaque prise */
+  sttModel: SttModelId;
+  sttAuto: boolean;
   outputDisplayId: number | null;
   selectedScriptId: string | null;
   showInspector: boolean;
@@ -117,6 +241,21 @@ export interface Settings extends ProjectSettings {
   theme: ThemeMode;
   /** Textes de bienvenue anglais + français déjà ajoutés à la bibliothèque */
   welcomeSeeded: boolean;
+  /** Version des textes fournis déjà ajoutés (2 = Welcome + scripts de test) */
+  seedVersion: number;
+  /** Onglet ouvert dans le panneau de réglages */
+  inspectorTab: InspectorTabId;
+  /** Vérifier au lancement si une version plus récente est publiée */
+  updateCheck: boolean;
+  /** Dernière version publiée déjà signalée, pour ne pas répéter l'annonce */
+  updateSeen: string;
+}
+
+/** Réponse de la vérification de mise à jour */
+export interface UpdateInfo {
+  version: string;
+  url: string;
+  newer: boolean;
 }
 
 /** Contenu d'un fichier .cariprompt */
@@ -148,6 +287,8 @@ export interface Playback {
   isPlaying: boolean;
   countdown: number | null;
   totalDuration: number; // secondes (Infinity à vitesse 0)
+  /** Durée affichée par les chronomètres, quand le débit réel est piloté (suivi vocal) */
+  displayDuration?: number;
   /** Chronomètre réel de la prise, pauses exclues */
   chronoMs: number;
   chronoStartedAt: number | null;
@@ -163,6 +304,9 @@ export type TextStyle = Pick<ProjectSettings,
 export interface OutputState {
   text: string;
   marks: StyleMark[];
+  /** Indication de rythme, ou null */
+  hint: CoachHint | null;
+  recording: boolean;
   style: TextStyle;
   mirror: Mirror;
   blackout: boolean;
@@ -191,7 +335,7 @@ export interface ImportResult {
 
 export type MenuCommand =
   | 'new' | 'import' | 'export' | 'duplicate' | 'rewind' | 'toggleOutput' | 'togglePlay'
-  | 'saveProject' | 'openProject' | 'toggleFullscreen';
+  | 'saveProject' | 'openProject' | 'toggleFullscreen' | 'toggleTracking' | 'toggleRecording';
 
 export interface ProjectReadResult {
   name: string;
@@ -224,7 +368,7 @@ export const DEFAULT_SPEED = 35;
 export const LINE_HEIGHT_MIN = 1;
 export const LINE_HEIGHT_MAX = 2.5;
 export const FONT_MIN = 24;
-export const FONT_MAX = 400;
+export const FONT_MAX = 500;
 export const FONT_STEP = 4;
 export const SEEK_STEP = 10;
 export const DEFAULT_LINE_HEIGHT = 1.45;
@@ -258,4 +402,114 @@ export function autoTitle(text: string, untitled = 'Untitled'): string {
   const first = text.split(/\r?\n/).map((l) => l.trim()).find((l) => l.length > 0);
   if (!first) return untitled;
   return first.length > 60 ? first.slice(0, 60) + '…' : first;
+}
+
+// MARK: - IA texte
+
+export type AiProvider = 'anthropic' | 'openai';
+export const AI_PROVIDERS: AiProvider[] = ['anthropic', 'openai'];
+
+/** Modèle proposé tant que la liste du fournisseur n'a pas été lue */
+export const AI_DEFAULT_MODELS: Record<AiProvider, string> = {
+  anthropic: 'claude-sonnet-5',
+  openai: 'gpt-5.6-terra',
+};
+
+/** Langues cibles proposées pour la traduction */
+/** Pages de facturation, ouvertes depuis l'app quand le compte n'a plus de crédit */
+export const AI_BILLING_URLS: Record<AiProvider, string> = {
+  anthropic: 'https://platform.claude.com/settings/billing',
+  openai: 'https://platform.openai.com/settings/organization/billing/overview',
+};
+
+export const AI_TARGETS = ['en', 'fr', 'es', 'de', 'it', 'pt', 'nl'] as const;
+
+export type AiTask =
+  | { kind: 'translate'; target: string }
+  | { kind: 'oral' };
+
+export interface AiModel { id: string; label: string }
+
+export interface AiKeyStatus {
+  anthropic: boolean;
+  openai: boolean;
+  /** Faux quand le trousseau du système n'est pas disponible (clé stockée en clair) */
+  encrypted: boolean;
+}
+
+export interface AiProgress { jobId: string; done: number; total: number }
+
+export type AiErrorCode =
+  | 'noKey' | 'badKey' | 'noCredit' | 'rateLimit' | 'overloaded' | 'network'
+  | 'refused' | 'badOutput' | 'tooLong' | 'cancelled' | 'unknown';
+
+export interface AiRunResult {
+  ok: boolean;
+  /** Une entrée par paragraphe envoyé, chacune avec un ou plusieurs paragraphes produits */
+  paragraphs?: string[][];
+  /** Paragraphes d'entrée dont un chiffre ou un élément protégé n'a pas été retrouvé */
+  warnings?: number[];
+  error?: AiErrorCode;
+  detail?: string;
+}
+
+// MARK: - Transcription locale
+
+export type SttModelId = 'base' | 'small' | 'turbo';
+export const STT_MODEL_IDS: SttModelId[] = ['turbo', 'small', 'base'];
+
+export interface SttModelInfo {
+  id: SttModelId;
+  downloadMB: number;
+  diskMB: number;
+  installed: boolean;
+}
+
+export interface SttSegment { start: number; end: number; text: string }
+
+export interface Transcript {
+  model: SttModelId;
+  /** Langue imposée à Whisper, ou chaîne vide pour la détection automatique */
+  language: string;
+  duration: number;
+  /** Plages de parole détectées, en secondes */
+  speech: Array<[number, number]>;
+  segments: SttSegment[];
+  createdAt: string;
+}
+
+export interface SubtitleCue { id: string; start: number; end: number; text: string }
+
+/** Passage du texte non prononcé pendant la prise */
+export interface SkippedPassage {
+  text: string;
+  /** Position du passage dans le texte (caractères), pour y sauter */
+  offset: number;
+  words: number;
+}
+
+export interface SpeechAnalysis {
+  /** Mots par minute, sur le temps de parole réel */
+  wordsPerMinute: number;
+  words: number;
+  /** Part des mots du passage lu retrouvés dans la transcription, 0–1 */
+  fidelity: number;
+  skipped: SkippedPassage[];
+  /** Mots prononcés absents du texte */
+  added: number;
+  fillers: Array<{ word: string; count: number }>;
+  repetitions: Array<{ text: string; time: number }>;
+  /** Pauses de plus de 0,8 s au milieu d'une phrase */
+  hesitations: Array<{ time: number; length: number }>;
+}
+
+export type SttErrorCode =
+  | 'engineUnavailable' | 'noModel' | 'network' | 'extract' | 'cancelled' | 'badAudio' | 'unknown';
+
+export interface SttProgress {
+  kind: 'download' | 'extract' | 'transcribe';
+  /** Modèle en téléchargement, ou prise en cours de transcription */
+  id: string;
+  done: number;
+  total: number;
 }

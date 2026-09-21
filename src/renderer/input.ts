@@ -108,11 +108,16 @@ export function installOperatorInput() {
       else if (k === 's' && !e.shiftKey) s.saveProject();
       else if (k === 'o' && e.shiftKey) s.openProjectDialog();
       else if (k === 'f' && e.shiftKey) s.setFullscreen(!s.fullscreen);
+      else if (k === 't' && e.shiftKey) s.toggleTracking();
+      else if (k === 'r' && e.shiftKey) s.toggleRecording();
+      else if (k === 'z' && !e.shiftKey) s.undo();
+      else if (k === 'z' && e.shiftKey) s.redo();
+      else if (k === 'y' && !isMac) s.redo();
       else if (k === 'q' && !isMac) window.close();
       else handled = false;
       if (handled) { e.preventDefault(); return; }
       if (editing) return;                       // ⌘C, ⌘V, ⌘Z… dans les champs
-      if (['c', 'v', 'x', 'a', 'z', 'w', 'm', 'h', 'q'].includes(k)) return; // rôles natifs
+      if (['c', 'v', 'x', 'a', 'w', 'm', 'h', 'q'].includes(k)) return; // rôles natifs
       e.preventDefault();
       return;
     }
@@ -177,6 +182,8 @@ export function installOperatorInput() {
       case 'saveProject': s.saveProject(); break;
       case 'openProject': s.openProjectDialog(); break;
       case 'toggleFullscreen': s.setFullscreen(!s.fullscreen); break;
+      case 'toggleTracking': s.toggleTracking(); break;
+      case 'toggleRecording': s.toggleRecording(); break;
     }
   });
 }

@@ -12,7 +12,7 @@ fi
 echo "▸ Installation des dépendances…"
 npm install --no-audit --no-fund
 
-echo "▸ Fabrication macOS (Apple Silicon + Intel)…"
+echo "▸ Fabrication macOS (Apple Silicon)…"
 npm run dist:mac
 
 echo "✓ Paquets disponibles dans ./release"

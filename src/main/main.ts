@@ -1,17 +1,29 @@
 import {
-  app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, screen, shell,
+  app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, screen, shell,
   type MenuItemConstructorOptions,
 } from 'electron';
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync } from 'node:fs';
 import { listFonts } from './fonts';
+import {
+  cancelDownload, cancelTranscription, deleteModel, downloadModel, listModels as listSttModels,
+  sttErrorCode, sttErrorDetail, transcribeFile, startLive, pushLive, stopLive, trackingModel,
+} from './stt';
+import { aiErrorCode, aiErrorDetail, cancelJob, keyStatus, listModels, runJob, setKey } from './ai';
+import {
+  deleteAudio, exportTake, listTakes, readAudio, revealTake, saveIndex, takeFilePath, writeAudio,
+} from './takes';
 import { readFile, rename, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { isLang, isTheme, LANGUAGES, tr, type Lang, type StringKey, type ThemeMode } from '../shared/i18n';
+import {
+  isLang, isTheme, LANGUAGES, SPELLCHECK_LANGS, tr,
+  type Lang, type StringKey, type ThemeMode,
+} from '../shared/i18n';
 import type {
   AppInfo, ChoiceItem, DisplayInfo, ForwardedInput, ImportResult, MenuCommand, OutputState, Prefs,
-  ProjectFile, ProjectReadResult,
+  ProjectFile, ProjectReadResult, Take, AiProvider, AiTask, SttModelId, UpdateInfo,
 } from '../shared/types';
+import { AI_BILLING_URLS } from '../shared/types';
 import { canImport, importFile, SUPPORTED_EXTENSIONS } from './importer';
 
 declare const __APP_VERSION__: string;
@@ -42,6 +54,33 @@ if (!app.requestSingleInstanceLock()) {
       mainWindow.focus();
     }
   });
+}
+
+// MARK: - Mise à jour
+
+const RELEASES_URL = 'https://github.com/CaribouNathan/CariPrompt/releases/latest';
+const LATEST_API = 'https://api.github.com/repos/CaribouNathan/CariPrompt/releases/latest';
+
+/** Compare deux versions « x.y.z » ; renvoie true si `a` est postérieure à `b` */
+function isNewer(a: string, b: string): boolean {
+  const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
+  }
+  return false;
+}
+
+/** Dernière version publiée sur GitHub. Aucune donnée n'est envoyée, seule l'URL est lue. */
+async function checkUpdate(): Promise<UpdateInfo> {
+  const res = await net.fetch(LATEST_API, {
+    headers: { accept: 'application/vnd.github+json', 'user-agent': `CariPrompt/${app.getVersion()}` },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as { tag_name?: string; html_url?: string };
+  const version = String(data.tag_name ?? '').replace(/^v/, '');
+  if (!/^\d+\.\d+\.\d+/.test(version)) throw new Error('version illisible');
+  return { version, url: data.html_url || RELEASES_URL, newer: isNewer(version, app.getVersion()) };
 }
 
 // MARK: - Stockage (userData/scripts.json, settings.json)
@@ -140,9 +179,20 @@ async function loadPrefs() {
 function setPrefs(update: Partial<Prefs>) {
   if (update.language) prefs.language = update.language;
   if (update.theme) applyTheme(update.theme);
+  if (update.language) applySpellchecker();
   buildMenu();
   if (outputWindow && !outputWindow.isDestroyed()) outputWindow.setTitle(t('outputWindowTitle'));
   mainWindow?.webContents.send('prefs:changed', { ...prefs });
+}
+
+/** Le correcteur orthographique suit la langue de l'interface. */
+function applySpellchecker() {
+  if (!mainWindow) return;
+  try {
+    mainWindow.webContents.session.setSpellCheckerLanguages(SPELLCHECK_LANGS[prefs.language] ?? ['en-US']);
+  } catch (err) {
+    logError('Correcteur orthographique', err);
+  }
 }
 
 function overlayColors() {
@@ -183,7 +233,11 @@ function createMainWindow() {
     show: false,
     title: 'CariPrompt',
     icon: isMac ? undefined : ICON_PNG,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#f5f5f7',
+    // macOS : la fenêtre laisse voir la matière du système sous les colonnes
+    // latérales (vibrance). Le fond doit rester transparent, sinon il la masque.
+    backgroundColor: isMac ? '#00000000' : (nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#f5f5f7'),
+    vibrancy: isMac ? 'sidebar' : undefined,
+    visualEffectState: isMac ? 'active' : undefined,
     titleBarStyle: 'hidden',
     trafficLightPosition: isMac ? { x: 16, y: 15 } : undefined,
     titleBarOverlay: isMac ? undefined : overlayColors(),
@@ -195,7 +249,7 @@ function createMainWindow() {
     },
   });
 
-  mainWindow.webContents.session.setSpellCheckerLanguages(['fr', 'en-US']);
+  applySpellchecker();
   mainWindow.loadFile(path.join(RENDERER_DIR, 'index.html'));
   mainWindow.once('ready-to-show', () => {
     buildMenu(); // réinstalle la barre de menus macOS une fois la fenêtre prête
@@ -395,6 +449,9 @@ function prompterItems(): MenuItemConstructorOptions[] {
     { type: 'separator' },
     cmdItem('toggleOutput', 'CmdOrCtrl+Shift+D', 'toggleOutput'),
     cmdItem('fullscreen', 'CmdOrCtrl+Shift+F', 'toggleFullscreen'),
+    { type: 'separator' },
+    cmdItem('btnVoiceTracking', 'CmdOrCtrl+Shift+T', 'toggleTracking'),
+    cmdItem('btnAudioRec', 'CmdOrCtrl+Shift+R', 'toggleRecording'),
   ];
 }
 
@@ -548,6 +605,109 @@ function registerIpc() {
   ipcMain.handle('displays:get', () => listDisplays());
 
   ipcMain.handle('fonts:list', () => listFonts());
+
+  // MARK: Prises
+  ipcMain.handle('stt:models', () => listSttModels());
+  ipcMain.handle('stt:download', async (e, id: SttModelId) => {
+    try {
+      await downloadModel(id, (phase, done, total) => {
+        if (!e.sender.isDestroyed()) e.sender.send('stt:progress', { kind: phase, id, done, total });
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: sttErrorCode(err), detail: sttErrorDetail(err) };
+    }
+  });
+  ipcMain.on('stt:cancelDownload', () => cancelDownload());
+  ipcMain.handle('stt:deleteModel', (_e, id: SttModelId) => deleteModel(id));
+  ipcMain.handle('stt:transcribe', async (e, jobId: string, file: string, model: SttModelId, language: string) => {
+    try {
+      const transcript = await transcribeFile(jobId, takeFilePath(file), model, language, (done, total) => {
+        if (!e.sender.isDestroyed()) e.sender.send('stt:progress', { kind: 'transcribe', id: jobId, done, total });
+      });
+      return { ok: true, transcript };
+    } catch (err) {
+      if (sttErrorCode(err) !== 'cancelled') logError('Transcription', err);
+      return { ok: false, error: sttErrorCode(err), detail: sttErrorDetail(err) };
+    }
+  });
+  ipcMain.on('stt:cancel', (_e, jobId: string) => cancelTranscription(jobId));
+
+  // Suivi vocal : l'audio arrive de l'interface par blocs de 64 ms à 16 kHz
+  ipcMain.handle('track:start', async (e, language: string) => {
+    try {
+      const model = await startLive(
+        language,
+        (h) => { if (!e.sender.isDestroyed()) e.sender.send('track:hyp', h); },
+        (speaking, at) => { if (!e.sender.isDestroyed()) e.sender.send('track:speech', { speaking, at }); },
+      );
+      return { ok: true, model };
+    } catch (err) {
+      return { ok: false, error: sttErrorCode(err), detail: sttErrorDetail(err) };
+    }
+  });
+  ipcMain.on('track:audio', (_e, samples: Float32Array, at: number) => pushLive(samples, at));
+  ipcMain.on('track:stop', () => stopLive());
+  ipcMain.handle('track:model', () => trackingModel());
+  ipcMain.handle('stt:exportSrt', async (_e, content: string, suggested: string): Promise<boolean> => {
+    if (!mainWindow) return false;
+    const safe = suggested.replace(/[/\\?%*:|"<>]/g, '-').trim() || 'subtitles';
+    const r = await dialog.showSaveDialog(mainWindow, {
+      title: t('exportSrtTitle'),
+      defaultPath: `${safe}.srt`,
+      filters: [{ name: t('srtFilter'), extensions: ['srt'] }],
+    });
+    if (r.canceled || !r.filePath) return false;
+    // BOM UTF-8 : certains logiciels de montage lisent sinon les accents de travers
+    await writeFile(r.filePath, '\uFEFF' + content, 'utf8');
+    return true;
+  });
+
+  ipcMain.handle('ai:keyStatus', () => keyStatus());
+  // Liens de l'interface : seulement ceux, connus, que l'application affiche
+  const LINKS = new Set(['https://fr.wikipedia.org/wiki/Haute-Savoie', RELEASES_URL]);
+  ipcMain.on('app:openLink', (_e, url: string) => {
+    if (LINKS.has(url)) shell.openExternal(url).catch(() => undefined);
+  });
+  ipcMain.handle('app:checkUpdate', checkUpdate);
+  // Seules les pages de facturation connues peuvent être ouvertes d'ici
+  ipcMain.on('ai:openBilling', (_e, provider: AiProvider) => {
+    const url = AI_BILLING_URLS[provider];
+    if (url) shell.openExternal(url).catch(() => undefined);
+  });
+  ipcMain.handle('ai:setKey', (_e, provider: AiProvider, key: string) => setKey(provider, key));
+  ipcMain.handle('ai:models', async (_e, provider: AiProvider) => {
+    try {
+      return { ok: true, models: await listModels(provider) };
+    } catch (e) {
+      return { ok: false, error: aiErrorCode(e), detail: aiErrorDetail(e) };
+    }
+  });
+  ipcMain.handle('ai:run', (e, jobId: string, provider: AiProvider, model: string, task: AiTask, paragraphs: string[]) =>
+    runJob(jobId, provider, model, task, paragraphs, (done, total) => {
+      if (!e.sender.isDestroyed()) e.sender.send('ai:progress', { jobId, done, total });
+    }));
+  ipcMain.on('ai:cancel', (_e, jobId: string) => cancelJob(jobId));
+
+  ipcMain.handle('takes:list', () => listTakes());
+  ipcMain.handle('takes:saveIndex', (_e, takes: Take[]) => saveIndex(takes));
+  ipcMain.handle('takes:writeAudio', (_e, id: string, data: ArrayBuffer, ext: string) => writeAudio(id, data, ext));
+  ipcMain.handle('takes:deleteAudio', (_e, file: string) => deleteAudio(file));
+  ipcMain.handle('takes:readAudio', (_e, file: string) => readAudio(file));
+  ipcMain.on('takes:reveal', (_e, file: string) => revealTake(file));
+  ipcMain.handle('takes:export', async (_e, file: string, suggested: string): Promise<boolean> => {
+    if (!mainWindow) return false;
+    const safe = suggested.replace(/[/\\?%*:|"<>]/g, '-').trim() || 'take';
+    const ext = path.extname(file).slice(1) || 'wav';
+    const r = await dialog.showSaveDialog(mainWindow, {
+      title: t('exportTakeTitle'),
+      defaultPath: `${safe}.${ext}`,
+      filters: [{ name: t('audioFilter'), extensions: [ext] }],
+    });
+    if (r.canceled || !r.filePath) return false;
+    await exportTake(file, r.filePath);
+    return true;
+  });
 
   ipcMain.handle('project:save', async (_e, data: ProjectFile, suggested: string): Promise<string | null> => {
     if (!mainWindow) return null;
