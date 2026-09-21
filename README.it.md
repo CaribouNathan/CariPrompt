@@ -5,7 +5,7 @@
 <h1 align="center">CariPrompt</h1>
 
 <p align="center">
-  Gobbo multi-schermo semplice e moderno, per macOS, Windows e Linux.<br>
+  Gobbo multi-schermo completare e moderno, per macOS, Windows e Linux.<br>
   <strong>Gratuito e open source</strong> — uno strumento <a href="https://github.com/CaribouNathan">Caribou Labs</a>.
 </p>
 
