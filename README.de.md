@@ -5,7 +5,7 @@
 <h1 align="center">CariPrompt</h1>
 
 <p align="center">
-  Einfacher, moderner Multi-Screen-Teleprompter für macOS, Windows und Linux.<br>
+  Ausgebucht, moderner Multi-Screen-Teleprompter für macOS, Windows und Linux.<br>
   <strong>Kostenlos und quelloffen</strong> — ein Werkzeug von <a href="https://github.com/CaribouNathan">Caribou Labs</a>.
 </p>
 
