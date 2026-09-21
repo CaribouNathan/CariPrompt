@@ -5,7 +5,7 @@
 <h1 align="center">CariPrompt</h1>
 
 <p align="center">
-  Teleprónter multipantalla, sencillo y moderno, para macOS, Windows y Linux.<br>
+  Teleprónter multipantalla, completo y moderno, para macOS, Windows y Linux.<br>
   <strong>Gratuito y de código abierto</strong> — una herramienta de <a href="https://github.com/CaribouNathan">Caribou Labs</a>.
 </p>
 
