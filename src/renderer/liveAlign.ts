@@ -13,12 +13,18 @@ import { tokenize, type Token } from './speechAnalysis';
 
 /** Nombre de mots de l'hypothèse pris en compte, en partant de la fin */
 const HYP_WORDS = 12;
-/** Fenêtre de recherche autour de la position courante, en mots */
-const BACK = 20;
+/** Fenêtre de recherche autour de la position courante, en mots.
+ *  Large en arrière : enregistrer une voix off, c'est reprendre des phrases. */
+const BACK = 48;
 const AHEAD = 90;
 const GAP = -0.5;
 const MISMATCH = -0.6;
+/** Un mot d'avance : Whisper ne rend jamais le mot en cours de prononciation */
 const LEAD = 1;
+/** Avance maximale tolérée devant le dernier mot confirmé */
+const MAX_LEAD = 8;
+/** Recul minimal, en mots, pour voir une reprise plutôt qu'une hésitation de la reconnaissance */
+const REPEAT = 6;
 
 export interface AlignResult {
   /** Indice du dernier mot prononcé */
@@ -118,7 +124,12 @@ export class LiveAligner {
         let score = raw - 0.35 * trailing;
         if (this.pos >= 0) {
           if (ahead > 12) score -= 0.02 * (ahead - 12);
-          if (ahead < -2) score -= 0.08 * (-2 - ahead);
+          // Reculer coûte, mais une reprise franche — plusieurs mots justes
+          // d'affilée — ne doit pas être écrasée par la pénalité de distance.
+          if (ahead < -2) {
+            const proof = hits[i][k] >= 5 ? 0.3 : hits[i][k] >= 4 ? 0.6 : 1;
+            score -= 0.08 * proof * (-2 - ahead);
+          }
         }
         if (score > bestScore) {
           bestScore = score;
@@ -131,7 +142,9 @@ export class LiveAligner {
     // Seuils : au moins deux mots justes, et une preuve forte pour un grand saut
     if (bestWord < 0 || bestHits < 2 || bestScore < 1.6) return null;
     const jump = bestWord - this.pos;
-    if (this.pos >= 0 && (jump > 30 || jump < -6) && (bestScore < 3.5 || bestHits < 4)) return null;
+    if (this.pos >= 0 && jump > 30 && (bestScore < 3.5 || bestHits < 4)) return null;
+    // Reprise d'une phrase : on accepte de reculer loin si la preuve est nette
+    if (this.pos >= 0 && jump < -6 && (bestScore < 2.8 || bestHits < 4)) return null;
 
     const skipped = this.pos >= 0 && jump > 10 ? jump - Math.round(this.rate * 1.5) : 0;
     // On ne recule que sur preuve nette : le lecteur reprend une phrase
@@ -151,18 +164,6 @@ export class LiveAligner {
     return { word: bestWord, score: bestScore, skipped: Math.max(0, skipped) };
   }
 
-  /**
-   * Position estimée maintenant, en mots (fractionnaire) : la dernière position
-   * confirmée, prolongée au rythme du lecteur pendant la latence de Whisper.
-   */
-  predict(now: number, speaking: boolean): number {
-    if (this.pos < 0) return -1;
-    if (!speaking || !this.lastAt) return this.pos;
-    // Whisper ne rend jamais le mot en cours de prononciation : un mot d'avance le compense
-    const lag = Math.min(2.5, Math.max(0, (now - this.lastAt) / 1000));
-    return Math.min(this.tokens.length - 1, this.pos + LEAD + this.rate * lag);
-  }
-
   /** Position dans le texte (caractères) d'une position fractionnaire en mots */
   charAt(word: number): number {
     if (!this.tokens.length) return 0;
@@ -171,4 +172,107 @@ export class LiveAligner {
     const b = this.tokens[Math.min(this.tokens.length - 1, Math.floor(w) + 1)];
     return a.start + (b.start - a.start) * (w - Math.floor(w));
   }
+}
+
+/**
+ * Position de lecture estimée, en mots.
+ *
+ * Whisper ne rend ses hypothèses que par à-coups, environ une par seconde.
+ * Prolonger la dernière position confirmée au débit du lecteur faisait avancer
+ * la cible entre deux hypothèses, puis retomber d'autant à l'arrivée de la
+ * suivante : une dent de scie de plusieurs mots, à chaque hypothèse, que le
+ * texte suivait en allant et venant. C'était la cause des aller-retours.
+ *
+ * L'estimation avance donc en continu, se laisse tirer en avant par chaque mot
+ * reconnu, et ne redescend que sur une reprise avérée — un recul franc, que
+ * l'alignement ne concède lui-même que sur preuve nette.
+ */
+export class ReadingEstimate {
+  private word = -1;
+  private at = 0;
+
+  reset(): void {
+    this.word = -1;
+    this.at = 0;
+  }
+
+  update(al: LiveAligner, now: number, speaking: boolean): number {
+    if (al.pos < 0) {
+      this.reset();
+      this.at = now;
+      return -1;
+    }
+    const confirmed = al.pos + LEAD;
+    if (this.word < 0 || confirmed < this.word - REPEAT) {
+      this.word = confirmed;
+    } else {
+      const dt = this.at ? Math.min(1, (now - this.at) / 1000) : 0;
+      const drift = speaking ? al.rate * dt : 0;
+      this.word = Math.min(Math.max(this.word + drift, confirmed), confirmed + MAX_LEAD);
+    }
+    this.at = now;
+    return Math.min(this.word, al.tokens.length - 1);
+  }
+}
+
+/** Constante de temps du rattrapage, en secondes : le texte rejoint sa ligne en douceur */
+const GLIDE = 0.3;
+/** Rattrapage arrière, plus lent : une reprise n'a pas à être expédiée */
+const GLIDE_BACK = 0.5;
+/** Vitesse maximale du rattrapage, en lignes par seconde */
+const MAX_LINES_PER_S = 7;
+/** Vitesse maximale en arrière, plus basse : le retour reste lisible */
+const MAX_BACK_LINES_PER_S = 4;
+/** Au-delà, le lecteur a changé de passage : on rejoint directement */
+const JUMP_LINES = 12;
+/** Zone morte : sous cette fraction de ligne, le texte ne bouge pas */
+const DEAD_LINES = 0.4;
+/** En arrière, il faut cet écart pour bouger : le texte ne recule que sur une reprise */
+const BACK_LINES = 1.2;
+
+
+/**
+ * Loi de régulation : de l'écart entre la ligne visée et la ligne affichée,
+ * en tire la vitesse de rattrapage, en progression par seconde.
+ *
+ * Zone morte devant, seuil plus large derrière : le texte avance dès qu'il
+ * prend du retard, mais ne recule que sur une vraie reprise de phrase — sans
+ * cette asymétrie, la moindre hésitation de la reconnaissance le faisait
+ * osciller. Au-delà de `JUMP_LINES`, le lecteur a changé de passage : rejoindre
+ * en glissant prendrait trop longtemps, on saute.
+ */
+export function trackingRate(err: number, line: number): { jump: boolean; rate: number } {
+  if (Math.abs(err) > line * JUMP_LINES) return { jump: true, rate: 0 };
+  // Le seuil est retranché de l'écart au lieu de le commander : à la sortie de
+  // la zone morte la vitesse part de zéro et croît, au lieu de s'établir d'un
+  // coup à sa valeur pleine. C'est ce saut qui se voyait au démarrage.
+  if (err > line * DEAD_LINES) {
+    return { jump: false, rate: Math.min(line * MAX_LINES_PER_S, (err - line * DEAD_LINES) / GLIDE) };
+  }
+  if (err < -line * BACK_LINES) {
+    return { jump: false, rate: Math.max(-line * MAX_BACK_LINES_PER_S, (err + line * BACK_LINES) / GLIDE_BACK) };
+  }
+  return { jump: false, rate: 0 };
+}
+
+/** Constante de temps du lissage de la vitesse, en secondes */
+const SMOOTH = 0.22;
+
+/**
+ * Vitesse réellement appliquée : celle de la loi, rejointe progressivement.
+ *
+ * La régulation recalcule une consigne dix fois par seconde et chaque
+ * hypothèse de la reconnaissance en décale la cible d'un coup. Appliquée
+ * telle quelle, la consigne changeait la vitesse du texte par paliers — le
+ * défilement partait, s'arrêtait, repartait. Le premier ordre ci-dessous
+ * borne l'accélération : la vitesse ne peut plus sauter, seulement enfler et
+ * retomber. Un saut de passage court-circuite le lissage, sans quoi le texte
+ * dériverait après avoir été reposé.
+ */
+export function smoothRate(previous: number, target: number, dt: number): number {
+  if (!Number.isFinite(previous)) return target;
+  const k = Math.min(1, Math.max(0, dt / SMOOTH));
+  const next = previous + (target - previous) * k;
+  // En deçà, le texte est à l'arrêt : inutile de traîner une vitesse résiduelle
+  return Math.abs(next) < 1e-7 ? 0 : next;
 }

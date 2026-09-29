@@ -5,7 +5,7 @@
 <h1 align="center">CariPrompt</h1>
 
 <p align="center">
-  Ausgebucht, moderner Multi-Screen-Teleprompter für macOS, Windows und Linux.<br>
+  Einfacher, moderner Multi-Screen-Teleprompter für macOS, Windows und Linux.<br>
   <strong>Kostenlos und quelloffen</strong> — ein Werkzeug von <a href="https://github.com/CaribouNathan">Caribou Labs</a>.
 </p>
 
@@ -98,7 +98,6 @@ Der Bildlauf hält 60 Bilder pro Sekunde ohne Ruckeln. Er wird über `requestAni
 - **Stil pro Auswahl**: Wählen Sie einen Textteil aus und geben Sie ihm eine Farbe, Fett oder Kursiv. Gedacht, um in einem Dialog **jedem Sprecher eine eigene Farbe** zuzuweisen. Die Stile folgen dem Text, wenn Sie ihn bearbeiten.
 - **Schrift** nach Wahl aus allen auf dem Computer installierten Schriften.
 - **Schriftschnitt** (mager bis schwarz), **kursiv**, **Großbuchstaben**.
-- **Farben** für Text, Hintergrund und Leselinie, mit Rückkehr zu den Standardfarben.
 - **Größe** von 24 bis 500 pt und **Zeilenabstand** von 1 bis 2,5.
 - **Ausrichtung** links oder zentriert, einstellbare seitliche **Ränder**.
 - **Rechtschreibprüfung** im Editor, passend zur Sprache der Oberfläche.
@@ -140,7 +139,8 @@ Die Schaltfläche **Stimmverfolgung** unter den Wiedergabetasten lässt den Tele
 So funktioniert es:
 1. **Kontinuierliche Erkennung.** Whisper transkribiert nicht im Datenstrom: Sobald es frei ist und neue Sprache eingetroffen ist, wird es auf die letzten sechs Sekunden der laufenden Äußerung neu gestartet. Die Sprachaktivitätserkennung entscheidet, wann dekodiert wird — nie bei Stille, wo Whisper bereitwillig Text erfindet.
 2. **Ausrichtung.** Das Ende jeder Transkription wird durch eine lokale Wort-für-Wort-Ausrichtung (Smith-Waterman) auf den Text bezogen, tolerant gegenüber schlecht erkannten Wörtern, in einem Fenster um die aktuelle Position. Rückwärts kostet mehr als vorwärts, und ein großer Sprung verlangt eine starke Übereinstimmung: Die Verfolgung läuft bei einem ähnlich klingenden Satz nicht davon.
-3. **Regelung.** Zehnmal pro Sekunde wird die Bildlaufgeschwindigkeit zu Ihrem gemessenen Tempo plus einer Korrektur der Abweichung. Eine **Vorhersage** gleicht die Latenz von Whisper aus: Zwischen zwei Transkriptionen läuft die Position in Ihrem Tempo weiter.
+3. **Regelung, Zeile für Zeile.** Zehnmal pro Sekunde zielt der Text auf **die Zeile, die das gesprochene Wort trägt**, nicht auf das Wort selbst: Er richtet sich auf diese Zeile aus und bewegt sich nicht mehr, solange Sie sie lesen. Das Aufholen ist proportional zur Abweichung, Anlauf und Halt erfolgen also allmählich — der Text gleitet wie auf einem Jogwheel, vorwärts wie rückwärts. Eine **Vorhersage** gleicht die Latenz von Whisper aus: Zwischen zwei Transkriptionen läuft die Position in Ihrem Tempo weiter.
+4. **Wiederholungen.** Einen Satz zu wiederholen ist bei einer Voice-over-Aufnahme der Normalfall: Das Suchfenster reicht weit zurück, und eine klare Wiederholung lässt den Text gleitend bis zur betreffenden Zeile zurücklaufen.
 
 Die Verfolgung nutzt das **leichteste der installierten Modelle**, für die geringste Latenz: Laden Sie **Base** (198 MB) herunter, auch wenn Sie die Aufnahmen mit Turbo transkribieren. Sprachverfolgung und eingestellte Geschwindigkeit lassen sich nicht kombinieren: Ist die Verfolgung aktiv, gibt Ihre Stimme das Tempo vor; ist sie abgeschaltet, übernimmt wieder die eingestellte Geschwindigkeit.
 
@@ -200,7 +200,7 @@ Der Anbieter wird im Block gewählt: **Claude (Anthropic)** oder **OpenAI**, mit
 ### Texte, Projekte und Voreinstellungen
 
 - **Textbibliothek**: so viele Texte wie nötig, jeder mit seiner Geschwindigkeit, seiner Zieldauer und seinen Farben.
-- **Mitgelieferte Texte**: ein Text **Welcome**, der alle Funktionen in den fünf Sprachen der Oberfläche vorstellt, und ein kurzes **Testskript** je Sprache, um die Geschwindigkeit einzustellen und die Sprachverfolgung auszuprobieren. Sie werden nur einmal hinzugefügt; ältere, unveränderte Willkommenstexte werden ersetzt, die von Ihnen bearbeiteten bleiben erhalten.
+- **Mitgelieferter Text**: nur einer, **Welcome**, der alle Funktionen in den fünf Sprachen der Oberfläche vorstellt. Er wird einmal hinzugefügt; ein unveränderter aus einer früheren Version wird ersetzt, ein von Ihnen bearbeiteter bleibt. Die Testtexte der Versionen 2.1 bis 2.2.10 werden entfernt, sofern unberührt.
 - **Mehrfachauswahl** wie im Finder: <kbd>⇧</kbd> + Klick für einen Bereich, <kbd>⌘</kbd> / <kbd>Ctrl</kbd> + Klick, um einen Text hinzuzufügen oder zu entfernen. Der Rechtsklick wirkt dann auf die gesamte Auswahl.
 - **Suche nach Stichwort** in den Titeln, oben in der Liste. Unabhängig von Groß- und Kleinschreibung sowie Akzenten: „presi“ findet „Vœux du président“.
 - **Automatisches Sichern** bei jeder Änderung und beim Schließen.
@@ -215,13 +215,19 @@ Der Anbieter wird im Block gewählt: **Claude (Anthropic)** oder **OpenAI**, mit
 - **Fünf Sprachen**: Englisch (Standard), Französisch, Spanisch, Deutsch, Italienisch. Menüs, Dialogfenster, Meldungen und Rechtschreibprüfung folgen der gewählten Sprache.
 - **Erscheinungsbild System, Hell oder Dunkel** (System als Standard).
 - macOS-Stil, identisch unter Windows und Linux.
-- **Einklappbare Kurzbefehl-Übersicht** unten in der linken Spalte.
+- **Kurzbefehl-Übersicht** mit <kbd>⌘</kbd><kbd>/</kbd> oder über die Tastatur-Schaltfläche unten in der linken Spalte.
 - **Kein Ton**: Die Oberfläche gibt keinen Piepton von sich, auch nicht bei einer nicht erkannten Taste.
 - Versionsnummer neben dem Namen der Anwendung angezeigt.
-- **Einstellungsbereich mit Tabs**: **Basis** (Ausgabe, Geschwindigkeit, Zieldauer, Steuerung, Fernbedienung), **Layout** (Typografie, Farben, Layout, Timecode), **Transkript** (Aufnahmen, Transkription), **KI-Tools** und **Eigene**. In jedem Tab lassen sich die Blöcke per Ziehen und Ablegen neu ordnen und über den Pfeil in ihrer Titelzeile einklappen; das „i“ liefert die Erklärung des Blocks.
-- **Tab Eigene**: Über das Menü oben im Tab fügen Sie dort einen beliebigen Block hinzu, der auch in seinem ursprünglichen Tab bleibt. Sein Inhalt bleibt von Start zu Start erhalten, und die Voreinstellungen sichern mehrere Anordnungen.
+- **Text oben, Vorschau unten**, durch einen Griff getrennt: Schreibbereich und Vorschau teilen sich die Höhe, wie Sie es möchten.
+- **Textliste**, in der Breite verstellbar und über den Pfeil am Kopf der Spalte ausblendbar; eine Lasche holt sie zurück. Die Einstellungsspalte behält ihre Breite.
+- **Text und Vorschau nebeneinander oder übereinander**, nach Wahl, über die beiden Symbole in der Titelleiste.
+- **Schrift und Größe des Textes** im Bearbeitungsfenster, unmittelbar beim Schreiben.
+- **Vorschau im Maßstab des Ausgabebildschirms** oder für den Bereich neu berechnet, nach Wahl: im ersten Fall ist das, was Sie sehen, genau das, was auf den Bildschirm geht.
+- **Countdown und Timecode** in der Titelleiste.
+- **Einstellungsbereich mit Tabs**: **Anzeige** (Ausgabe, Layout, Voreinstellungen), **Wiedergabe** (Zieldauer, Steuerung, Fernbedienung) und **Werkzeuge** (Aufnahmen, Transkription, KI). In jedem Tab lassen sich die Blöcke per Ziehen und Ablegen neu ordnen und über den Pfeil in ihrer Titelzeile einklappen; das „i“ liefert die Erklärung des Blocks.
+- **Blöcke wandern zwischen den Tabs**: Über das Menü am Ende eines Tabs fügen Sie dort einen beliebigen Block hinzu, der damit seinen vorherigen Tab verlässt; das Kreuz in seiner Titelzeile schickt ihn zurück. Die Anordnung bleibt von Start zu Start erhalten, und Voreinstellungen sichern mehrere davon.
 - **Unter macOS** lassen die seitlichen Spalten die Materialität des Systems durchscheinen (Vibrancy), wie die Seitenleisten der Apple-Programme, und die Trennlinien der großen Bereiche weichen schlichten Farbunterschieden.
-- **Updates**: Unten im Bereich fragt „Nach Updates suchen“ die zuletzt auf GitHub veröffentlichte Version ab. Die Prüfung beim Start kann deaktiviert werden; es werden keine Daten gesendet, und die Installation bleibt manuell.
+- **Updates**: Die Versionsnummer oben links öffnet die Liste der auf GitHub veröffentlichten Versionen und wird blau, sobald eine neuere vorliegt. „Beim Start nach Updates suchen“ lässt sich im Menü ☰ abwählen; es werden keine Daten gesendet, die Installation bleibt manuell.
 
 ### Menüs
 
@@ -240,12 +246,14 @@ Die Dateien stehen auf der Seite **[Releases](https://github.com/CaribouNathan/C
 
 | System | Datei | Anmerkung |
 |---|---|---|
-| macOS — Apple Silicon (M1 bis M4) | `CariPrompt-2.2.2-macOS-AppleSilicon.dmg` | macOS 12 oder neuer, Installation per Ziehen und Ablegen |
-| macOS — Apple Silicon (M1 bis M4) | `CariPrompt-2.2.2-macOS-AppleSilicon.zip` | Dieselbe Anwendung, ohne Image-Datei |
-| Windows 10 / 11 (64 Bit) | `CariPrompt-2.2.2-Windows-Setup.exe` | Klassisches Installationsprogramm |
-| Windows 10 / 11 (64 Bit) | `CariPrompt-2.2.2-Windows-Portable.exe` | Ohne Installation, startet direkt |
-| Linux x86_64 | `CariPrompt-2.2.2-Linux-x86_64.AppImage` | Alle Distributionen |
-| Debian, Ubuntu und Derivate | `CariPrompt-2.2.2-Linux-amd64.deb` | Installierbares Paket |
+| macOS — Apple Silicon (M1 bis M4) | `CariPrompt-2.2.10-macOS-AppleSilicon.dmg` | macOS 12 oder neuer, Installation per Ziehen und Ablegen |
+| macOS — Apple Silicon (M1 bis M4) | `CariPrompt-2.2.10-macOS-AppleSilicon.zip` | Dieselbe Anwendung, ohne Image-Datei |
+| Windows 10 / 11 (Intel, AMD) | `CariPrompt-2.2.10-Windows-Setup.exe` | Klassisches Installationsprogramm |
+| Windows 10 / 11 (Intel, AMD) | `CariPrompt-2.2.10-Windows-Portable.exe` | Ohne Installation, startet direkt |
+| Windows 11 ARM64 (Snapdragon, VM auf Mac mit Apple Silicon) | `CariPrompt-2.2.10-Windows-ARM64-Setup.exe` | Installationsprogramm — **ohne Transkription und ohne Sprachverfolgung** |
+| Windows 11 ARM64 | `CariPrompt-2.2.10-Windows-ARM64-Portable.exe` | Ohne Installation — **ohne Transkription und ohne Sprachverfolgung** |
+| Linux x86_64 | `CariPrompt-2.2.10-Linux-x86_64.AppImage` | Alle Distributionen |
+| Linux ARM64 (aarch64) | `CariPrompt-2.2.10-Linux-arm64.AppImage` | Raspberry Pi 64 Bit, ARM-VM, Asahi |
 
 > Seit 2.0.2 werden nur noch Macs mit **Apple Silicon** (M1 und neuer) bereitgestellt: Menü  › **Über diesen Mac**, Zeile **Chip**. Auf einem Intel-Mac lässt sich die Anwendung mit `MAC_ARCHS=x64 npm run dist:mac` aus den Quellen kompilieren.
 
@@ -272,26 +280,25 @@ xattr -cr /Applications/CariPrompt.app
 
 ### Windows
 
-1. Starten Sie `CariPrompt-2.2.2-Windows-Setup.exe` (oder die portable Version).
+1. Starten Sie `CariPrompt-2.2.10-Windows-Setup.exe` (oder die portable Version; auf einem ARM64-Rechner die Dateien `-Windows-ARM64-`).
 2. **Der Computer wurde durch Windows geschützt** (SmartScreen) erscheint: Klicken Sie auf **Weitere Informationen** und dann auf **Trotzdem ausführen**.
 3. Das Installationsprogramm erlaubt die Wahl des Installationsordners. Eine Verknüpfung wird im Startmenü und auf dem Desktop angelegt.
 
 ### Linux
 
-**AppImage**:
+**AppImage** — eine Datei, alle Distributionen:
 
 ```bash
-chmod +x CariPrompt-2.2.2-Linux-x86_64.AppImage
-./CariPrompt-2.2.2-Linux-x86_64.AppImage
+chmod +x CariPrompt-2.2.10-Linux-x86_64.AppImage
+./CariPrompt-2.2.10-Linux-x86_64.AppImage
 ```
 
-Einige aktuelle Distributionen verlangen die Bibliothek FUSE 2 (`sudo apt install libfuse2t64` unter Ubuntu 24.04).
+> [!NOTE]
+> Unter Fedora und Derivaten verlangen AppImages FUSE 2, das dort standardmäßig fehlt: `sudo dnf install fuse`. Ohne es startet die Anwendung dennoch mit `./CariPrompt-2.2.10-Linux-x86_64.AppImage --appimage-extract-and-run`.
 
-**Paket .deb**:
+Auf einem ARM-Rechner (Raspberry Pi 64 Bit, ARM-VM auf einem Mac mit Apple Silicon) nehmen Sie `CariPrompt-2.2.10-Linux-arm64.AppImage`: Eine x86_64-Binärdatei startet auf einem ARM-Prozessor nicht, in welchem Format auch immer.
 
-```bash
-sudo apt install ./CariPrompt-2.2.2-Linux-amd64.deb
-```
+Für die Einbindung in das Programmmenü installiert [Gear Lever](https://github.com/mijorus/gearlever) ein AppImage sauber.
 
 ## Erste Schritte
 
@@ -404,7 +411,15 @@ Die Einzelheiten stehen im [CHANGELOG](CHANGELOG.md).
 
 | Version | Technologie | Plattformen | Wichtigste Neuerungen |
 |---|---|---|---|
-| **2.2.2** | Electron | macOS Apple Silicon, Windows, Linux | macOS-Vibrancy auf den Spalten, besser abgesetzte Vorschau, README in fünf Sprachen |
+| **2.2.10** | Electron | macOS Apple Silicon, Windows (Intel und ARM64), Linux (x86_64 und ARM64) | Windows-Start: kein stilles Scheitern mehr, Fenster und Protokoll im Fehlerfall |
+| 2.2.9 | Electron | macOS Apple Silicon, Windows (Intel und ARM64), Linux (x86_64 und ARM64) | Die Versionsnummer öffnet die Liste der veröffentlichten Versionen |
+| 2.2.8 | Electron | macOS Apple Silicon, Windows (Intel und ARM64), Linux (x86_64 und ARM64) | Updates über die Versionsnummer, Haarlinie der Vorschau entfernt |
+| 2.2.7 | Electron | macOS Apple Silicon, Windows (Intel und ARM64), Linux (x86_64 und ARM64) | Nur ein mitgelieferter Text, geglätteter Lauf der Sprachverfolgung |
+| 2.2.6 | Electron | macOS Apple Silicon, Windows (Intel und ARM64), Linux (x86_64 und ARM64) | Drei Tabs, Kürzel mit ⌘/, Sprecherfarben als Auswahl-Bubble, Status-Pille entfernt |
+| 2.2.5 | Electron | macOS Apple Silicon, Windows (Intel und ARM64), Linux (x86_64 und ARM64) | Geschwindigkeit in der Transportleiste, Sprachverfolgung ohne Hin und Her, stabile Oberfläche im schmalen Fenster |
+| 2.2.4 | Electron | macOS Apple Silicon, Windows (Intel und ARM64), Linux (x86_64 und ARM64) | macOS-Pakete neu gebaut |
+| 2.2.3 | Electron | macOS Apple Silicon, Windows (Intel und ARM64), Linux (x86_64 und ARM64) | Text über der Vorschau, verstellbare und ausblendbare Spalten, Sprachverfolgung Zeile für Zeile und Wiederholungen, ARM-Pakete |
+| 2.2.2 | Electron | macOS Apple Silicon, Windows, Linux | macOS-Vibrancy auf den Spalten, besser abgesetzte Vorschau, README in fünf Sprachen |
 | 2.2.1 | Electron | macOS Apple Silicon, Windows, Linux | Freigestelltes Symbol, Tabs in einer Zeile in allen Sprachen, durchscheinende Spalten unter macOS |
 | 2.2.0 | Electron | macOS Apple Silicon, Windows, Linux | Einstellungsbereich mit Tabs, einklappbare Blöcke, anpassbarer Tab, Update-Prüfung, .dmg-Image, schlankere Anwendung |
 | 2.1.0 | Electron | macOS Apple Silicon, Windows, Linux | Mehrsprachiger Text „Welcome“ und mitgelieferte Testskripte; Kurzbefehle für die Sprachverfolgung und die Aufnahme |
@@ -436,7 +451,7 @@ Die Versionen 1.0 und 1.1 (nativ für macOS) werden durch die Electron-Version e
 - **Verbleibender Timecode**: Schätzung auf Grundlage der aktuellen Geschwindigkeit, er ändert sich, wenn sich die Geschwindigkeit ändert.
 - **Trackpad**: Der Nachlauf lässt sich nicht von einer gewollten Geste unterscheiden, die Taktrate der Geschwindigkeitsänderung ist daher begrenzt.
 - **Keine automatische Aktualisierung**: Neue Versionen sind in den Releases herunterzuladen.
-- **Linux**: Nur die Architektur x86_64 wird bereitgestellt.
+- **Windows ARM64**: Die Spracherkennungsbibliothek gibt es für diese Architektur nicht. Transkription der Aufnahmen und Stimmverfolgung stehen dort nicht zur Verfügung; alles Übrige funktioniert.
 - **Sprachverfolgung**: Der Text muss gelesen werden. Eine Improvisation, die davon abweicht, versetzt die Verfolgung in den Zustand „verloren“ (orange Schaltfläche): Der Text wartet, bis die Stimme den Text wiederfindet. Ein Satz, der an anderer Stelle im Text wiederholt wird, kann die Verfolgung in seltenen Fällen anziehen; sie richtet sich beim nächsten Satz wieder aus.
 - **Transkription**: Whisper liefert mit diesen Modellen nicht den Zeitstempel jedes Wortes, sondern nur den jedes Segments. Die Aufteilung der Untertitel innerhalb eines Segments erfolgt daher proportional, ausgerichtet an den erkannten Sprechpausen. Die Zählungen von Füllwörtern und Wiederholungen sind Mindestwerte (siehe oben).
 - **KI-Texte**: Die Prüfung der Zahlen vergleicht Ziffernfolgen, keine Werte. „10000“, umgeschrieben zu „10 000“, wird fälschlich gemeldet; umgekehrt bleibt eine Zahl, die in einen anderen Satz desselben Absatzes verschoben wurde, unbemerkt. Eine schließende Klammer am Ende einer URL (`…/Page_(X)`) wird für Satzzeichen gehalten.
@@ -458,7 +473,9 @@ Erstellung der Pakete (abgelegt in `release/`):
 |---|---|---|
 | `npm run dist:mac` | `.zip` für Apple Silicon, ad hoc signiert (`MAC_ARCHS=x64` für Intel) | macOS oder Linux (mit [rcodesign](https://github.com/indygreg/apple-platform-rs)) |
 | `npm run dist:win` | NSIS-Installationsprogramm und portable Version | Windows, oder Linux/macOS mit Wine |
-| `npm run dist:linux` | AppImage und `.deb` | Linux |
+| `npm run dist:linux` | AppImage x86_64 | Linux |
+| `npm run dist:linux-arm64` | AppImage ARM64 | Linux |
+| `npm run dist:win-arm64` | Windows-Installationsprogramm und portable Version für ARM64 | Windows |
 
 Auf dem Mac verkettet `build.command` die Installation der Abhängigkeiten und die Erstellung der Pakete.
 

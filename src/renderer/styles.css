@@ -99,7 +99,7 @@ svg { flex-shrink: 0; }
   height: 44px;
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto 1fr;
   align-items: center;
   gap: 12px;
   padding: 0 12px;
@@ -109,8 +109,41 @@ svg { flex-shrink: 0; }
   backdrop-filter: blur(20px);
 }
 .titlebar.mac { padding-left: 78px; }
+/* Deux colonnes depuis la 2.2.6 : la pastille d'état a disparu. Elle répétait
+   la vitesse (désormais dans le transport), la durée (dans le pied d'éditeur)
+   et le corps du texte (dans l'éditeur) ; seul son point de sortie lui
+   appartenait, il a rejoint le bouton qui commande cette sortie. */
+.titlebar-brand, .titlebar-actions { min-width: 0; }
+.out-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--label-3);
+  margin-left: 2px;
+}
+.out-dot.on { background: var(--green); }
+
 .titlebar.overlay { padding-left: 6px; padding-right: 150px; }
 .titlebar-brand .tool-btn { padding: 0 5px; }
+.bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--control-border);
+  border-radius: 7px;
+  background: var(--control);
+  color: var(--label);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+.bar-btn:hover { background: var(--hover); }
+.bar-btn.on { border-color: var(--accent); color: var(--accent); }
+.bar-btn.icon { padding: 0 8px; }
+.split-switch { display: inline-flex; gap: 2px; -webkit-app-region: no-drag; }
 
 .titlebar-brand {
   display: flex;
@@ -120,6 +153,9 @@ svg { flex-shrink: 0; }
 }
 .titlebar-brand img { display: block; }
 .brand-name { font-weight: 600; font-size: 13.5px; }
+/* Numéro de version : un bouton vers les versions publiées, bleu quand il en
+   existe une plus récente. Il a remplacé en 2.2.8 le pied du panneau de
+   réglages, qui portait un bouton de vérification et son interrupteur. */
 .brand-version {
   font-size: 11px;
   font-weight: 500;
@@ -129,9 +165,18 @@ svg { flex-shrink: 0; }
   background: var(--hover);
   border: 1px solid var(--separator);
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-
-.titlebar-center { justify-self: center; }
+.brand-version:hover { color: var(--label); border-color: var(--control-border); }
+.brand-version.newer {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.brand-version.newer:hover { color: #fff; filter: brightness(1.08); }
+.brand-version:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .titlebar-actions {
   justify-self: end;
@@ -140,28 +185,6 @@ svg { flex-shrink: 0; }
 }
 
 .titlebar button, .titlebar select { -webkit-app-region: no-drag; }
-
-.status-pill {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 4px 14px;
-  border-radius: 999px;
-  background: var(--hover);
-  border: 1px solid var(--separator);
-  color: var(--label-2);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.status-pill span { display: inline-flex; align-items: center; gap: 5px; }
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--label-3);
-}
-.dot.on { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 25%, transparent); }
 
 .tool-btn {
   display: inline-flex;
@@ -188,13 +211,52 @@ svg { flex-shrink: 0; }
 /* MARK: Barre latérale */
 
 .sidebar {
-  width: 236px;
-  flex: 0 0 236px;
+  position: relative;
+  flex-grow: 0;
+  /* Elle cède du terrain plutôt que de pousser le reste hors de la fenêtre */
+  flex-shrink: 1;
+  min-width: 170px;
   display: flex;
   flex-direction: column;
   background: var(--sidebar);
   border-right: 1px solid var(--separator);
 }
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 8px;
+}
+.sidebar-head .sidebar-title { flex: 1 1 auto; }
+.sidebar-head .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--label-3);
+}
+.sidebar-head .icon-btn:hover { background: var(--hover); color: var(--label); }
+
+/* Languette de retour, quand la colonne est masquée */
+.sidebar-reveal {
+  flex: 0 0 18px;
+  width: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-right: 1px solid var(--separator);
+  background: var(--sidebar);
+  color: var(--label-3);
+  padding: 0;
+}
+.sidebar-reveal:hover { background: var(--hover); color: var(--label); }
+.platform-darwin .sidebar-reveal { border-right: none; background: transparent; }
 
 .sidebar-title {
   padding: 14px 18px 6px;
@@ -298,26 +360,18 @@ svg { flex-shrink: 0; }
 .drop-zone-title { font-size: 11.5px; font-weight: 500; }
 .drop-zone-sub { font-size: 10px; color: var(--label-3); }
 
-.shortcuts-panel {
-  flex-shrink: 0;
-  border-top: 1px solid var(--separator);
+/* Feuille des raccourcis (⌘/) : la liste a quitté la colonne des textes en 2.2.6 */
+.shortcuts-sheet { width: 460px; max-width: calc(100vw - 48px); }
+.shortcuts-sheet h4 { display: flex; align-items: center; gap: 7px; }
+.shortcuts-sheet .shortcuts {
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  padding: 0 0 14px;
+  font-size: 12px;
+  gap: 7px 16px;
 }
-.shortcuts-panel.open { max-height: 46%; display: flex; flex-direction: column; }
-.shortcuts-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 7px 14px;
-  border: none;
-  background: transparent;
-  color: var(--label-2);
-  font-size: 11px;
-  font-weight: 600;
-}
-.shortcuts-head:hover { color: var(--label); }
-.shortcuts-head .chevron { margin-left: auto; font-size: 9px; }
-.shortcuts-panel .shortcuts { overflow-y: auto; padding: 0 14px 10px; }
+.shortcuts-sheet dt { font-weight: 600; white-space: nowrap; }
+.shortcuts-sheet dd { margin: 0; color: var(--label-2); }
 
 .sidebar-footer {
   display: flex;
@@ -328,15 +382,51 @@ svg { flex-shrink: 0; }
 
 /* MARK: Éditeur */
 
+.center {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* L'éditeur est positionné, donc peint au-dessus du panneau de réglages :
+     tout débordement doit rester dans le centre. */
+  overflow: hidden;
+}
+.center.rows { flex-direction: column; }
+.center.columns { flex-direction: row; }
+.center.columns > .editor {
+  min-width: 260px;
+  min-height: 0;
+  border-bottom: none;
+  border-right: 1px solid var(--separator);
+}
+.platform-darwin .center.columns > .editor { border-right: none; }
+
 .editor {
   position: relative;
-  flex: 0 1 auto;
-  min-width: 260px;
+  flex: 0 0 auto;
+  min-height: 140px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: var(--content);
-  border-right: 1px solid var(--separator);
+  border-bottom: 1px solid var(--separator);
 }
+
+/* Typographie du texte, au plus près de l'écriture */
+.editor-typo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 14px 8px;
+  border-bottom: 1px solid var(--separator);
+}
+.editor-typo .slider { flex: 1 1 120px; min-width: 100px; }
+/* Annuler et rétablir restent ensemble : séparés par un retour à la ligne,
+   ils donnaient une deuxième rangée pour un seul bouton. */
+.undo-pair { display: inline-flex; gap: 2px; }
+.typo-label { font-size: 11.5px; color: var(--label-2); }
 
 .editor-title {
   border: none;
@@ -368,21 +458,30 @@ svg { flex-shrink: 0; }
   pointer-events: none;
 }
 
-/* Barre de style de la sélection */
-.selection-bar {
+/* Styles de locuteur : bulle au-dessus de la sélection depuis la 2.2.6.
+   La barre permanente occupait une ligne pour rien tant que rien n'était
+   sélectionné — c'est-à-dire presque toujours. */
+.selection-popover {
+  position: fixed;
+  z-index: 60;
+  transform: translate(-50%, -100%);
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px 8px;
-  border-bottom: 1px solid var(--separator);
+  padding: 5px 8px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--separator);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
 }
-.selection-bar.disabled { opacity: 0.45; }
-.selection-label {
-  font-size: 11px;
-  color: var(--label-2);
-  margin-right: 2px;
+.platform-darwin .selection-popover { backdrop-filter: blur(20px); }
+.selection-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--separator);
+  margin: 0 2px;
 }
-.swatches { display: flex; gap: 4px; margin-right: 4px; }
+.swatches { display: flex; gap: 4px; margin-right: 2px; }
 .swatch {
   width: 17px;
   height: 17px;
@@ -403,6 +502,7 @@ svg { flex-shrink: 0; }
 }
 .mark-btn:hover:not(:disabled) { background: var(--hover); color: var(--label); }
 .mark-btn.on { background: var(--accent); color: #fff; }
+.mark-btn:disabled { opacity: 0.35; }
 
 .editor-footer {
   display: flex;
@@ -418,20 +518,56 @@ svg { flex-shrink: 0; }
 
 .resizer {
   position: absolute;
+  z-index: 5;
+}
+.resizer.vertical {
   top: 0;
   right: -3px;
   width: 6px;
   height: 100%;
   cursor: col-resize;
-  z-index: 5;
 }
+.resizer.horizontal {
+  left: 0;
+  bottom: -3px;
+  height: 6px;
+  width: 100%;
+  cursor: row-resize;
+}
+.resizer:hover { background: color-mix(in srgb, var(--accent) 35%, transparent); }
 
 /* MARK: Scène */
+
+/* Choix de la définition d'aperçu : dans un coin de l'aperçu depuis la 2.2.6.
+   Il trônait au-dessus, sur une ligne à lui, pour un réglage qu'on change deux
+   fois par an. Hors du flux, il ne décale plus l'image ; il ne paraît que
+   lorsque la souris est sur l'aperçu. */
+.preview-source {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px 3px 3px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  border: 1px solid var(--separator);
+  backdrop-filter: blur(12px);
+  /* Discret au repos, net sous la souris : présent sans s'imposer */
+  opacity: 0.5;
+  transition: opacity 0.16s ease;
+}
+.preview-box:hover .preview-source,
+.preview-source:focus-within { opacity: 1; }
+.preview-dims { font-size: 11px; color: var(--label-3); }
 
 .stage {
   flex: 1 1 0;
   background: var(--stage);
-  min-width: 340px;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -439,6 +575,7 @@ svg { flex-shrink: 0; }
 }
 
 .preview-box {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -450,7 +587,10 @@ svg { flex-shrink: 0; }
   overflow: hidden;
   border-radius: 12px;
   background: #000;
-  box-shadow: var(--shadow), 0 0 0 1px var(--separator);
+  /* Pas de liseré : en thème sombre il dessinait un trait blanc au bord du
+     noir, très visible en bas de l'aperçu. Le rectangle noir se détache seul
+     de la teinte de la scène, dans les deux thèmes. */
+  box-shadow: var(--shadow);
 }
 
 .transport {
@@ -465,9 +605,40 @@ svg { flex-shrink: 0; }
 }
 
 .transport-row {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.transport-row .time.right { margin-left: auto; }
+.transport-modes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Vitesse, sur la même ligne que les commandes de lecture */
+.transport-speed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 210px;
+  min-width: 170px;
+}
+.transport-speed .slider { flex: 1 1 auto; min-width: 70px; }
+.speed-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--label-2);
+  white-space: nowrap;
+}
+.transport-speed .speed-value {
+  min-width: 26px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .time {
@@ -565,6 +736,7 @@ input[type='range']::-webkit-slider-thumb {
 .inspector {
   width: 336px;
   flex: 0 0 336px;
+  min-width: 336px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -606,7 +778,6 @@ input[type='range']::-webkit-slider-thumb {
   padding: 14px 14px 24px;
 }
 
-.custom-head { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
 .preset-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .preset-bar .push-btn {
   width: auto;
@@ -615,30 +786,6 @@ input[type='range']::-webkit-slider-thumb {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-.custom-head .note { padding: 4px 2px; }
-
-.inspector-foot {
-  flex-shrink: 0;
-  padding: 8px 14px 10px;
-  border-top: 1px solid var(--separator);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.foot-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.foot-line .link-btn { text-align: right; }
-.foot-version, .foot-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.foot-version, .foot-label { font-size: 11.5px; color: var(--label-2); }
-.update-dot {
-  padding: 1px 7px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 10.5px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Drapeau des scripts fournis */
@@ -679,7 +826,6 @@ input[type='range']::-webkit-slider-thumb {
 .group h3 .icon-btn:hover { background: var(--control-bg); color: var(--label); }
 .group h3 .info-btn.on { color: var(--accent); }
 .block-chevron { font-size: 15px; }
-.shortcuts-head .chevron { font-size: 13px; }
 .group.collapsed h3 { margin-bottom: 0; }
 .block-info {
   padding: 6px 4px 8px;
@@ -853,7 +999,6 @@ strong.num { color: var(--label); font-weight: 600; }
   overflow-x: hidden;
 }
 .shortcuts dt { font-weight: 600; white-space: nowrap; }
-.shortcuts-panel .shortcuts { overflow-x: hidden; }
 .shortcuts dd { margin: 0; color: var(--label-2); }
 
 .preset-list { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 12px 12px; }
@@ -915,29 +1060,6 @@ strong.num { color: var(--label); font-weight: 600; }
 }
 
 /* MARK: Enregistrement et prises */
-
-.rec-btn {
-  position: relative;
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--label-2);
-  overflow: hidden;
-}
-.rec-btn:hover { background: var(--hover); color: var(--label); }
-.rec-btn.on { background: var(--red); color: #fff; }
-.rec-btn .rec-level {
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 3px;
-  background: #fff;
-  opacity: 0.85;
-  transform-origin: bottom;
-}
 
 .take-list { padding: 4px 12px 12px; }
 .take {
@@ -1298,8 +1420,6 @@ strong.num { color: var(--label); font-weight: 600; }
   height: 100%;
   cursor: default;
 }
-.button-pair { display: flex; gap: 8px; margin: 10px 12px; }
-.button-pair .push-btn { margin: 0; flex: 1; width: auto; }
 
 /* MARK: Fenêtre de sortie */
 
@@ -1481,73 +1601,28 @@ body.output { background: #000; cursor: none; }
 .ai-credit span { line-height: 1.4; }
 .ai-credit .link-btn { padding: 0; font-size: inherit; }
 
-/* --- 2.0 : barre de sélection en colonne étroite --- */
-/* La barre passe à la ligne au lieu de déborder sur l'aperçu, et perd son libellé quand la place manque */
-.editor { container-type: inline-size; container-name: editor; }
-.selection-bar { flex-wrap: wrap; row-gap: 6px; min-width: 0; overflow: hidden; }
-@container editor (max-width: 400px) {
-  .selection-label { display: none; }
-}
-
 /* --- 2.0 : suivi vocal --- */
-.track-btn {
-  position: relative;
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  border: 1px solid var(--control-border);
-  background: var(--control);
-  color: var(--label-2);
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.track-btn:hover { color: var(--label); }
-.track-btn.loading, .track-btn.listening { color: var(--accent); border-color: var(--accent); }
-.track-btn.following { background: var(--accent); border-color: var(--accent); color: #fff; }
-.track-btn.lost { background: var(--orange); border-color: var(--orange); color: #fff; }
-.track-btn.loading svg { animation: track-pulse 1s ease-in-out infinite; }
 @keyframes track-pulse { 50% { opacity: 0.35; } }
-@media (prefers-reduced-motion: reduce) { .track-btn.loading svg { animation: none; } }
 .canvas-hint.hint-skipped { background: rgba(255, 149, 0, 0.9); color: #fff; }
 /* Cinq boutons dans le transport : on resserre pour ne pas rogner les chronos */
 .transport-buttons { gap: 12px; }
-.transport-row { grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr); column-gap: 8px; }
 .transport .time { white-space: nowrap; }
-/* Transport étroit : les chronos passent sur une ligne à part, au-dessus des boutons */
 .transport { container-type: inline-size; container-name: transport; }
-@container transport (max-width: 400px) {
-  .transport-row {
-    grid-template-columns: 1fr 1fr;
-    grid-template-areas: "tl tr" "btn btn";
-    row-gap: 6px;
-  }
-  .transport-row > .time:first-child { grid-area: tl; }
-  .transport-row > .time.right { grid-area: tr; }
-  .transport-row > .transport-buttons { grid-area: btn; justify-self: center; }
-}
 
-/* --- 2.0.1 : boutons de mode explicites --- */
-.transport-modes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--separator);
-}
+/* --- 2.2.3 : boutons de mode compacts, à droite du transport --- */
 .mode-btn {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-height: 34px;
-  padding: 6px 10px;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 10px;
   border-radius: 8px;
   border: 1px solid var(--control-border);
   background: var(--control);
   color: var(--label);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   overflow: hidden;
   white-space: nowrap;
@@ -1569,23 +1644,30 @@ body.output { background: #000; cursor: none; }
 .rec-meter { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, 0.25); }
 .rec-meter span { display: block; height: 100%; background: #fff; transform-origin: left; transition: transform 0.08s linear; }
 
-/* Colonne étroite : les états passent sous le libellé plutôt que de le couper */
-@container transport (max-width: 360px) {
-  .transport-modes { grid-template-columns: 1fr; }
+/* Transport étroit — 2.2.5.
+   Une seule ligne : chronos, commandes de lecture, modes, vitesse. Quand la
+   place manque, les libellés s'effacent avant que quoi que ce soit ne passe à
+   la ligne ; les boutons gardent leur infobulle et leur raccourci. En dernier
+   recours seulement, les modes prennent une ligne à eux. */
+/* Seuils relevés sur la ligne complète : 716 points pour tout tenir avec les
+   libellés, 676 sans le mot « vitesse », 490 sans les libellés des modes. */
+@container transport (max-width: 716px) {
+  .transport-row { gap: 10px; }
+  .speed-word { display: none; }
+  /* La base sert au calcul des retours à la ligne : ramenée au minimum réel,
+     elle évite qu'un chrono passe à la ligne pour une douzaine de points. */
+  .transport-speed { flex-basis: 170px; }
+}
+@container transport (max-width: 676px) {
+  .mode-label { display: none; }
+  .mode-btn { padding: 0 8px; }
+}
+@container transport (max-width: 430px) {
+  .transport-modes { order: 3; width: 100%; justify-content: center; }
+  .transport-row .time.right { margin-left: 0; }
 }
 
 /* --- 2.1.0 --- */
-.mode-key {
-  font: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  padding: 1px 5px;
-  border-radius: 4px;
-  border: 1px solid var(--control-border);
-  color: var(--label-2);
-  background: transparent;
-}
-.mode-btn.following .mode-key, .mode-btn.lost .mode-key, .mode-btn.rec.on .mode-key { color: inherit; border-color: rgba(255, 255, 255, 0.5); }
 a.dept-74 { cursor: pointer; border-radius: 3px; transition: transform 0.12s ease; }
 a.dept-74:hover { transform: scale(1.15); }
 a.dept-74:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -1603,21 +1685,14 @@ a.dept-74:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px;
 .platform-darwin .sidebar,
 .platform-darwin .inspector,
 .platform-darwin .editor,
-.platform-darwin .shortcuts-panel,
 .platform-darwin .sidebar-footer,
 .platform-darwin .tab-bar,
-.platform-darwin .inspector-foot,
 .platform-darwin .drop-zone {
   border: none;
 }
 
-
 /* Zones internes des colonnes : séparées par un fond très légèrement plus dense */
-.platform-darwin .shortcuts-panel,
 .platform-darwin .sidebar-footer,
-.platform-darwin .inspector-foot {
-  background: rgba(255, 255, 255, 0.34);
-}
 .platform-darwin .tab-bar {
   background: rgba(255, 255, 255, 0.22);
 }
@@ -1632,11 +1707,7 @@ a.dept-74:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px;
 }
 
 @media (prefers-color-scheme: dark) {
-  .platform-darwin .shortcuts-panel,
   .platform-darwin .sidebar-footer,
-  .platform-darwin .inspector-foot {
-    background: rgba(255, 255, 255, 0.05);
-  }
   .platform-darwin .tab-bar { background: rgba(255, 255, 255, 0.03); }
   .platform-darwin .sidebar { box-shadow: inset -14px 0 18px -18px rgba(0, 0, 0, 0.5); }
   .platform-darwin .inspector { box-shadow: inset 14px 0 18px -18px rgba(0, 0, 0, 0.5); }

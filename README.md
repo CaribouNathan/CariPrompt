@@ -5,7 +5,7 @@
 <h1 align="center">CariPrompt</h1>
 
 <p align="center">
-  Prompteur multi-écrans complet et moderne, pour macOS, Windows et Linux.<br>
+  Prompteur multi-écrans simple et moderne, pour macOS, Windows et Linux.<br>
   <strong>Gratuit et open source</strong> — un outil <a href="https://github.com/CaribouNathan">Caribou Labs</a>.
 </p>
 
@@ -82,7 +82,7 @@ Le défilement tient 60 images par seconde sans à-coup. Il est appliqué direct
 
 ### Lecture et vitesse
 
-- **Vitesse de 0 à 100**, par paliers de 1 (0 = texte arrêté, 35 ≈ débit parlé courant). En interne, 1 point correspond à 4 mots par minute.
+- **Vitesse de 0 à 100**, par paliers de 1 (0 = texte arrêté, 35 ≈ débit parlé courant), réglée depuis la barre de transport, à droite des commandes de lecture : elle reste sous la main quand les deux colonnes latérales sont masquées. En interne, 1 point correspond à 4 mots par minute.
 - **Durée estimée** calculée en direct à partir du nombre de mots et de la vitesse.
 - **Durée cible** : indiquez la durée voulue pour la vidéo, la vitesse est calculée automatiquement. Un avertissement s'affiche si la durée demande une vitesse hors plage. Toute modification manuelle de la vitesse désactive la durée cible.
 - **Décompte de 3 secondes** avant chaque lancement (désactivable). Espace pendant le décompte l'annule.
@@ -98,7 +98,6 @@ Le défilement tient 60 images par seconde sans à-coup. Il est appliqué direct
 - **Style par sélection** : sélectionnez une partie du texte et donnez-lui une couleur, du gras ou de l'italique. Prévu pour attribuer **une couleur par intervenant** dans un dialogue. Les styles suivent le texte quand vous l'éditez.
 - **Police** au choix parmi toutes les polices installées sur l'ordinateur.
 - **Graisse** (maigre à noir), **italique**, **majuscules**.
-- **Couleurs** du texte, du fond et de la ligne de lecture, avec retour aux couleurs par défaut.
 - **Taille** de 24 à 500 pt et **interligne** de 1 à 2,5.
 - **Alignement** gauche ou centré, **marges** latérales réglables.
 - **Correcteur orthographique** dans l'éditeur, aligné sur la langue de l'interface.
@@ -140,7 +139,8 @@ Le bouton **Suivi voix**, sous les commandes de lecture, fait **suivre votre voi
 Comment ça marche :
 1. **Reconnaissance continue.** Whisper ne transcrit pas en flux : dès qu'il est libre et que de la parole nouvelle est arrivée, il est relancé sur les six dernières secondes de l'énoncé en cours. La détection d'activité vocale décide quand décoder — jamais sur du silence, où Whisper invente volontiers du texte.
 2. **Alignement.** La fin de chaque transcription est recalée sur le texte par un alignement local mot à mot (Smith-Waterman), tolérant aux mots mal reconnus, dans une fenêtre autour de la position courante. Reculer coûte plus cher qu'avancer, et un grand saut exige une correspondance forte : le suivi ne s'emballe pas sur une phrase ressemblante.
-3. **Régulation.** Dix fois par seconde, le débit de défilement devient votre rythme mesuré plus une correction de l'écart. Une **prédiction** compense la latence de Whisper : entre deux transcriptions, la position avance à votre rythme.
+3. **Régulation, ligne à ligne.** Dix fois par seconde, le texte vise **la ligne qui porte le mot prononcé**, pas le mot lui-même : il se cale sur cette ligne et n'en bouge plus tant que vous la lisez. Le rattrapage est proportionnel à l'écart, donc le départ et l'arrêt sont progressifs — le texte glisse comme sur une molette de jog, en avant comme en arrière. Une **prédiction** compense la latence de Whisper : entre deux transcriptions, la position avance à votre rythme.
+4. **Reprises.** Répéter une phrase est le cas normal d'un enregistrement de voix off : la fenêtre de recherche remonte loin en arrière et une reprise nette fait redescendre le texte en glissant jusqu'à la ligne concernée.
 
 Le suivi utilise le **plus léger des modèles installés**, pour la latence la plus faible : téléchargez **Base** (198 Mo) même si vous transcrivez les prises avec Turbo. Le suivi vocal et la vitesse réglée ne se combinent pas : quand le suivi est actif, c'est votre voix qui donne le rythme ; quand il est coupé, la vitesse réglée reprend la main.
 
@@ -200,7 +200,7 @@ Le fournisseur se choisit dans le bloc : **Claude (Anthropic)** ou **OpenAI**, a
 ### Textes, projets et préréglages
 
 - **Bibliothèque de textes** : autant de textes que nécessaire, chacun avec sa vitesse, sa durée cible et ses couleurs.
-- **Textes fournis** : un texte **Welcome** qui présente toutes les fonctions dans les cinq langues de l'interface, et un **script de test** court par langue pour régler la vitesse et essayer le suivi vocal. Ils sont ajoutés une seule fois ; les anciens textes de bienvenue non modifiés sont remplacés, ceux que vous avez retouchés sont conservés.
+- **Texte fourni** : un seul, **Welcome**, qui présente toutes les fonctions dans les cinq langues de l'interface. Il n'est ajouté qu'une fois ; celui d'une version antérieure que vous n'avez pas modifié est remplacé, celui que vous avez retouché est conservé. Les scripts de test des versions 2.1 à 2.2.10 sont retirés s'ils sont intacts.
 - **Sélection multiple** comme dans le Finder : <kbd>⇧</kbd> + clic pour une plage, <kbd>⌘</kbd> / <kbd>Ctrl</kbd> + clic pour ajouter ou retirer un texte. Le clic droit agit alors sur toute la sélection.
 - **Recherche par mot-clé** dans les titres, en haut de la liste. Insensible à la casse et aux accents : « presi » trouve « Vœux du président ».
 - **Enregistrement automatique** à chaque modification et à la fermeture.
@@ -215,13 +215,19 @@ Le fournisseur se choisit dans le bloc : **Claude (Anthropic)** ou **OpenAI**, a
 - **Cinq langues** : anglais (par défaut), français, espagnol, allemand, italien. Menus, boîtes de dialogue, messages et correcteur orthographique suivent la langue choisie.
 - **Apparence Système, Claire ou Sombre** (Système par défaut).
 - Style macOS, identique sur Windows et Linux.
-- **Rappel des raccourcis** repliable en bas de la colonne de gauche.
+- **Rappel des raccourcis** sur <kbd>⌘</kbd><kbd>/</kbd>, ou par le bouton clavier en bas de la colonne de gauche.
 - **Aucun son** : l'interface n'émet aucun bip, même sur une touche non reconnue.
 - Numéro de version affiché à côté du nom de l'application.
-- **Panneau de réglages en onglets** : **Essentiel** (sortie, vitesse, durée cible, commandes, télécommande), **Mise en page** (typographie, couleurs, mise en page, timecode), **Transcription** (prises, transcription), **Outils IA** et **Perso**. Dans chaque onglet, les blocs se réordonnent par glisser-déposer et se replient par la flèche de leur ligne de titre ; le « i » donne l'explication du bloc.
-- **Onglet Perso** : le menu en haut de l'onglet y ajoute n'importe quel bloc, qui reste aussi dans son onglet d'origine. Son contenu est conservé au redémarrage, et les préréglages en enregistrent plusieurs dispositions.
+- **Texte en haut, aperçu en bas** par défaut, séparés par une poignée : la zone d'écriture et l'aperçu se partagent la hauteur comme vous l'entendez.
+- **Colonne des textes** redimensionnable et masquable par le chevron en tête de colonne ; une languette la ramène. La colonne de réglages, elle, garde sa largeur.
+- **Texte et aperçu côte à côte ou l'un au-dessus de l'autre**, au choix, par les deux icônes de la barre de titre.
+- **Police et taille du texte** dans la fenêtre d'édition, au plus près de l'écriture.
+- **Aperçu à l'échelle de l'écran de sortie** ou recalculé pour le panneau, au choix : dans le premier cas, ce que vous voyez est exactement ce qui part sur l'écran.
+- **Décompte et timecode** dans la barre de titre.
+- **Panneau de réglages en onglets** : **Affichage** (sortie, mise en page, préréglages), **Lecture** (durée cible, commandes, télécommande) et **Outils** (prises, transcription, IA). Dans chaque onglet, les blocs se réordonnent par glisser-déposer et se replient par la flèche de leur ligne de titre ; le « i » donne l'explication du bloc.
+- **Blocs déplaçables d'un onglet à l'autre** : le menu en bas de l'onglet y ajoute n'importe quel bloc, qu'il quitte alors son onglet précédent ; la croix de sa ligne de titre le renvoie chez lui. La disposition est conservée au redémarrage, et les préréglages en enregistrent plusieurs.
 - **Sur macOS**, les colonnes latérales laissent voir la matière du système (vibrance), comme les barres latérales des applications d'Apple, et les traits de séparation des grandes zones laissent place à de simples écarts de teinte.
-- **Mises à jour** : en bas du panneau, « Vérifier les mises à jour » interroge la dernière version publiée sur GitHub. La vérification au lancement peut être désactivée ; aucune donnée n'est envoyée et l'installation reste manuelle.
+- **Mises à jour** : le numéro de version, en haut à gauche, ouvre la liste des versions publiées sur GitHub, et passe au bleu quand il en existe une plus récente. « Vérifier les mises à jour au lancement » se décoche depuis le menu ☰ ; aucune donnée n'est envoyée et l'installation reste manuelle.
 
 ### Menus
 
@@ -240,12 +246,14 @@ Les fichiers sont disponibles dans la page **[Releases](https://github.com/Carib
 
 | Système | Fichier | Remarque |
 |---|---|---|
-| macOS — Apple Silicon (M1 à M4) | `CariPrompt-2.2.2-macOS-AppleSilicon.dmg` | macOS 12 ou plus récent, installation par glisser-déposer |
-| macOS — Apple Silicon (M1 à M4) | `CariPrompt-2.2.2-macOS-AppleSilicon.zip` | Même application, sans image disque |
-| Windows 10 / 11 (64 bits) | `CariPrompt-2.2.2-Windows-Setup.exe` | Installeur classique |
-| Windows 10 / 11 (64 bits) | `CariPrompt-2.2.2-Windows-Portable.exe` | Sans installation, se lance directement |
-| Linux x86_64 | `CariPrompt-2.2.2-Linux-x86_64.AppImage` | Toutes distributions |
-| Debian, Ubuntu et dérivés | `CariPrompt-2.2.2-Linux-amd64.deb` | Paquet installable |
+| macOS — Apple Silicon (M1 à M4) | `CariPrompt-2.2.10-macOS-AppleSilicon.dmg` | macOS 12 ou plus récent, installation par glisser-déposer |
+| macOS — Apple Silicon (M1 à M4) | `CariPrompt-2.2.10-macOS-AppleSilicon.zip` | Même application, sans image disque |
+| Windows 10 / 11 (Intel, AMD) | `CariPrompt-2.2.10-Windows-Setup.exe` | Installeur classique |
+| Windows 10 / 11 (Intel, AMD) | `CariPrompt-2.2.10-Windows-Portable.exe` | Sans installation, se lance directement |
+| Windows 11 ARM64 (Snapdragon, VM sur Mac Apple Silicon) | `CariPrompt-2.2.10-Windows-ARM64-Setup.exe` | Installeur — **sans transcription ni suivi vocal** |
+| Windows 11 ARM64 | `CariPrompt-2.2.10-Windows-ARM64-Portable.exe` | Sans installation — **sans transcription ni suivi vocal** |
+| Linux x86_64 | `CariPrompt-2.2.10-Linux-x86_64.AppImage` | Toutes distributions |
+| Linux ARM64 (aarch64) | `CariPrompt-2.2.10-Linux-arm64.AppImage` | Raspberry Pi 64 bits, VM ARM, Asahi |
 
 > Depuis la 2.0.2, seuls les Mac **Apple Silicon** (M1 et suivants) sont fournis : menu  › **À propos de ce Mac**, ligne **Puce**. Sur un Mac Intel, l'application se compile depuis les sources avec `MAC_ARCHS=x64 npm run dist:mac`.
 
@@ -272,26 +280,25 @@ xattr -cr /Applications/CariPrompt.app
 
 ### Windows
 
-1. Lancez `CariPrompt-2.2.2-Windows-Setup.exe` (ou la version portable).
+1. Lancez `CariPrompt-2.2.10-Windows-Setup.exe` (ou la version portable ; sur une machine ARM64, les fichiers `-Windows-ARM64-`).
 2. **Windows a protégé votre ordinateur** (SmartScreen) s'affiche : cliquez sur **Informations complémentaires**, puis sur **Exécuter quand même**.
 3. L'installeur permet de choisir le dossier d'installation. Un raccourci est créé dans le menu Démarrer et sur le bureau.
 
 ### Linux
 
-**AppImage** :
+**AppImage** — un fichier, toutes les distributions :
 
 ```bash
-chmod +x CariPrompt-2.2.2-Linux-x86_64.AppImage
-./CariPrompt-2.2.2-Linux-x86_64.AppImage
+chmod +x CariPrompt-2.2.10-Linux-x86_64.AppImage
+./CariPrompt-2.2.10-Linux-x86_64.AppImage
 ```
 
-Certaines distributions récentes demandent la bibliothèque FUSE 2 (`sudo apt install libfuse2t64` sur Ubuntu 24.04).
+> [!NOTE]
+> Sur Fedora et dérivés, les AppImage demandent FUSE 2, absent par défaut : `sudo dnf install fuse`. Sans lui, l'application se lance quand même avec `./CariPrompt-2.2.10-Linux-x86_64.AppImage --appimage-extract-and-run`.
 
-**Paquet .deb** :
+Sur une machine ARM (Raspberry Pi 64 bits, VM ARM sur Mac Apple Silicon), prenez `CariPrompt-2.2.10-Linux-arm64.AppImage` : un binaire x86_64 ne démarre pas sur un processeur ARM, quel que soit le format.
 
-```bash
-sudo apt install ./CariPrompt-2.2.2-Linux-amd64.deb
-```
+Pour une intégration au menu des applications, [Gear Lever](https://github.com/mijorus/gearlever) installe une AppImage proprement.
 
 ## Prise en main
 
@@ -404,7 +411,15 @@ Le détail est dans le [CHANGELOG](CHANGELOG.md).
 
 | Version | Technologie | Plateformes | Nouveautés principales |
 |---|---|---|---|
-| **2.2.2** | Electron | macOS Apple Silicon, Windows, Linux | Vibrance macOS sur les colonnes, aperçu mieux détaché, README en cinq langues |
+| **2.2.10** | Electron | macOS Apple Silicon, Windows (Intel et ARM64), Linux (x86_64 et ARM64) | Démarrage Windows : plus d'échec silencieux, fenêtre et journal en cas de problème |
+| 2.2.9 | Electron | macOS Apple Silicon, Windows (Intel et ARM64), Linux (x86_64 et ARM64) | Le numéro de version ouvre la liste des versions publiées |
+| 2.2.8 | Electron | macOS Apple Silicon, Windows (Intel et ARM64), Linux (x86_64 et ARM64) | Mise à jour portée par le numéro de version, liseré de l'aperçu retiré |
+| 2.2.7 | Electron | macOS Apple Silicon, Windows (Intel et ARM64), Linux (x86_64 et ARM64) | Un seul texte fourni, défilement du suivi vocal lissé |
+| 2.2.6 | Electron | macOS Apple Silicon, Windows (Intel et ARM64), Linux (x86_64 et ARM64) | Trois onglets, raccourcis sur ⌘/, couleurs en bulle de sélection, pastille d'état retirée |
+| 2.2.5 | Electron | macOS Apple Silicon, Windows (Intel et ARM64), Linux (x86_64 et ARM64) | Vitesse dans la barre de transport, suivi vocal sans aller-retours, interface tenue en fenêtre étroite |
+| 2.2.4 | Electron | macOS Apple Silicon, Windows (Intel et ARM64), Linux (x86_64 et ARM64) | Paquets macOS reconstruits |
+| 2.2.3 | Electron | macOS Apple Silicon, Windows (Intel et ARM64), Linux (x86_64 et ARM64) | Texte au-dessus de l'aperçu, colonnes réglables et masquables, suivi vocal ligne à ligne et reprises, paquets ARM |
+| 2.2.2 | Electron | macOS Apple Silicon, Windows, Linux | Vibrance macOS sur les colonnes, aperçu mieux détaché, README en cinq langues |
 | 2.2.1 | Electron | macOS Apple Silicon, Windows, Linux | Icône détourée, onglets sur une ligne dans toutes les langues, colonnes translucides sur macOS |
 | 2.2.0 | Electron | macOS Apple Silicon, Windows, Linux | Panneau de réglages en onglets, blocs repliables, onglet personnalisable, vérification des mises à jour, image .dmg, application allégée |
 | 2.1.0 | Electron | macOS Apple Silicon, Windows, Linux | Texte « Welcome » multilingue et scripts de test fournis ; raccourcis pour le suivi vocal et l'enregistrement |
@@ -436,7 +451,7 @@ Les versions 1.0 et 1.1 (natives macOS) sont remplacées par la version Electron
 - **Timecode restant** : estimation basée sur la vitesse actuelle, il change si la vitesse change.
 - **Trackpad** : l'inertie ne peut pas être distinguée d'un geste volontaire, la cadence de changement de vitesse est donc limitée.
 - **Pas de mise à jour automatique** : les nouvelles versions sont à télécharger dans les Releases.
-- **Linux** : seule l'architecture x86_64 est fournie.
+- **Windows ARM64** : la bibliothèque de reconnaissance vocale n'existe pas pour cette architecture. La transcription des prises et le suivi vocal y sont indisponibles ; tout le reste fonctionne.
 - **Suivi vocal** : il faut lire le texte. Une improvisation qui s'en écarte fait passer le suivi à l'état « perdu » (bouton orange) : le texte attend que la voix retrouve le script. Une phrase répétée ailleurs dans le texte peut, rarement, attirer le suivi ; il se recale à la phrase suivante.
 - **Transcription** : Whisper ne fournit pas l'horodatage de chaque mot avec ces modèles, seulement celui de chaque segment. Le découpage des sous-titres à l'intérieur d'un segment est donc proportionnel, recalé sur les silences détectés. Les décomptes de mots parasites et de répétitions sont des minimums (voir plus haut).
 - **Rédaction IA** : le contrôle des chiffres compare des suites de chiffres, pas des valeurs. « 10000 » réécrit « 10 000 » est signalé à tort ; à l'inverse, un chiffre déplacé dans une autre phrase du même paragraphe passe inaperçu. Une parenthèse finale d'URL (`…/Page_(X)`) est prise pour de la ponctuation.
@@ -458,7 +473,9 @@ Fabrication des paquets (déposés dans `release/`) :
 |---|---|---|
 | `npm run dist:mac` | `.zip` Apple Silicon signé en ad hoc (`MAC_ARCHS=x64` pour Intel) | macOS ou Linux (avec [rcodesign](https://github.com/indygreg/apple-platform-rs)) |
 | `npm run dist:win` | Installeur NSIS et version portable | Windows, ou Linux/macOS avec Wine |
-| `npm run dist:linux` | AppImage et `.deb` | Linux |
+| `npm run dist:linux` | AppImage x86_64 | Linux |
+| `npm run dist:linux-arm64` | AppImage ARM64 | Linux |
+| `npm run dist:win-arm64` | Installeur et portable Windows ARM64 | Windows |
 
 Sur Mac, `build.command` enchaîne l'installation des dépendances et la fabrication des paquets.
 

@@ -5,7 +5,7 @@
 <h1 align="center">CariPrompt</h1>
 
 <p align="center">
-  A complete, modern multi-screen teleprompter for macOS, Windows and Linux.<br>
+  A simple, modern multi-screen teleprompter for macOS, Windows and Linux.<br>
   <strong>Free and open source</strong> — a <a href="https://github.com/CaribouNathan">Caribou Labs</a> tool.
 </p>
 
@@ -98,7 +98,6 @@ Scrolling holds 60 frames per second without stutter. It is applied directly to 
 - **Styling by selection**: select part of the text and give it a color, bold or italic. Designed to assign **one color per speaker** in a dialogue. Styles follow the text as you edit it.
 - **Font** chosen from every font installed on the computer.
 - **Weight** (light to black), **italic**, **all caps**.
-- **Colors** for the text, the background and the reading line, with a reset to the default colors.
 - **Size** from 24 to 500 pt and **line spacing** from 1 to 2.5.
 - **Alignment** left or center, adjustable side **margins**.
 - **Spell checker** in the editor, matching the interface language.
@@ -140,7 +139,8 @@ The **Voice tracking** button, below the playback controls, makes the prompter *
 How it works:
 1. **Continuous recognition.** Whisper does not transcribe as a stream: as soon as it is free and new speech has come in, it is run again on the last six seconds of the current utterance. Voice activity detection decides when to decode — never on silence, where Whisper happily invents text.
 2. **Alignment.** The end of each transcript is matched back to the script by a local word-by-word alignment (Smith-Waterman), tolerant of misrecognized words, in a window around the current position. Going back costs more than going forward, and a long jump requires a strong match: tracking does not run away on a similar-sounding sentence.
-3. **Regulation.** Ten times per second, the scrolling rate becomes your measured pace plus a correction for the gap. A **prediction** compensates for Whisper's latency: between two transcripts, the position advances at your pace.
+3. **Regulation, line by line.** Ten times per second, the text aims at **the line that carries the word being spoken**, not at the word itself: it settles on that line and does not move off it as long as you are reading it. The catch-up is proportional to the gap, so starting and stopping are gradual — the text glides as if on a jog wheel, forwards as well as backwards. A **prediction** compensates for Whisper's latency: between two transcripts, the position advances at your pace.
+4. **Retakes.** Repeating a sentence is the normal case in a voice-over recording: the search window reaches far back, and a clean retake glides the text back to the line concerned.
 
 Tracking uses the **lightest of the installed models**, for the lowest latency: download **Base** (198 MB) even if you transcribe takes with Turbo. Voice tracking and the set speed do not combine: when tracking is on, your voice sets the pace; when it is off, the set speed takes over again.
 
@@ -200,7 +200,7 @@ The provider is chosen in the block: **Claude (Anthropic)** or **OpenAI**, with 
 ### Scripts, projects and presets
 
 - **Script library**: as many scripts as you need, each with its own speed, target duration and colors.
-- **Bundled scripts**: a **Welcome** script that presents every feature in the five interface languages, and a short **test script** per language to set the speed and try voice tracking. They are added once; older welcome scripts that were not modified are replaced, the ones you have edited are kept.
+- **Bundled script**: just one, **Welcome**, presenting every feature in the five interface languages. It is added once; an unmodified one from an earlier version is replaced, one you have edited is kept. The test scripts from 2.1 to 2.2.10 are removed if untouched.
 - **Multiple selection** as in the Finder: <kbd>⇧</kbd> + click for a range, <kbd>⌘</kbd> / <kbd>Ctrl</kbd> + click to add or remove a script. Right-click then acts on the whole selection.
 - **Keyword search** in the titles, at the top of the list. Case- and accent-insensitive: "presi" finds "The President's Address".
 - **Automatic saving** on every change and on close.
@@ -215,13 +215,19 @@ The provider is chosen in the block: **Claude (Anthropic)** or **OpenAI**, with 
 - **Five languages**: English (default), French, Spanish, German, Italian. Menus, dialogs, messages and the spell checker follow the chosen language.
 - **System, Light or Dark appearance** (System by default).
 - macOS styling, identical on Windows and Linux.
-- **Shortcut reminder**, collapsible, at the bottom of the left column.
+- **Shortcut reminder** on <kbd>⌘</kbd><kbd>/</kbd>, or from the keyboard button at the bottom of the left column.
 - **No sound**: the interface never beeps, not even on an unrecognized key.
 - Version number shown next to the application name.
-- **Tabbed settings panel**: **Essentials** (output, speed, target duration, controls, clicker), **Layout** (typography, colors, layout, timecode), **Transcript** (takes, transcription), **AI tools** and **Custom**. In each tab, blocks are reordered by drag and drop and fold away with the arrow on their title row; the "i" gives the block's explanation.
-- **Custom tab**: the menu at the top of the tab adds any block to it, and that block also stays in its original tab. Its contents are kept across restarts, and presets save several arrangements.
+- **Text on top, preview below**, separated by a handle: the writing area and the preview share the height however you see fit.
+- **Script list column**, resizable and hideable from the chevron at the top of the column; a tab brings it back. The settings column keeps its width.
+- **Script and preview side by side or one above the other**, your choice, from the two icons in the title bar.
+- **Font and text size** in the editing window, as close as possible to the writing.
+- **Preview at the scale of the output screen** or recomputed for the panel, as you prefer: in the first case, what you see is exactly what goes out to the screen.
+- **Countdown and timecode** in the title bar.
+- **Tabbed settings panel**: **Display** (output, layout, presets), **Playback** (target duration, controls, clicker) and **Tools** (takes, transcription, AI). In each tab, blocks are reordered by drag and drop and fold away with the arrow on their title row; the "i" gives the block's explanation.
+- **Blocks move between tabs**: the menu at the bottom of a tab adds any block to it, which then leaves its previous tab; the cross on its title row sends it home. The arrangement is kept across restarts, and presets save several of them.
 - **On macOS**, the side columns let the system material show through (vibrancy), like the sidebars of Apple's applications, and the separating lines of the large areas give way to simple shifts in tone.
-- **Updates**: at the bottom of the panel, "Check for updates" queries the latest version published on GitHub. The check at launch can be turned off; no data is sent and installation stays manual.
+- **Updates**: the version number, top left, opens the list of releases published on GitHub and turns blue when a newer one exists. “Check for updates at launch” can be unticked from the ☰ menu; no data is sent and installation stays manual.
 
 ### Menus
 
@@ -240,12 +246,14 @@ The files are available on the **[Releases](https://github.com/CaribouNathan/Car
 
 | System | File | Note |
 |---|---|---|
-| macOS — Apple Silicon (M1 to M4) | `CariPrompt-2.2.2-macOS-AppleSilicon.dmg` | macOS 12 or newer, drag-and-drop installation |
-| macOS — Apple Silicon (M1 to M4) | `CariPrompt-2.2.2-macOS-AppleSilicon.zip` | Same app, without the disk image |
-| Windows 10 / 11 (64-bit) | `CariPrompt-2.2.2-Windows-Setup.exe` | Standard installer |
-| Windows 10 / 11 (64-bit) | `CariPrompt-2.2.2-Windows-Portable.exe` | No installation, runs directly |
-| Linux x86_64 | `CariPrompt-2.2.2-Linux-x86_64.AppImage` | All distributions |
-| Debian, Ubuntu and derivatives | `CariPrompt-2.2.2-Linux-amd64.deb` | Installable package |
+| macOS — Apple Silicon (M1 to M4) | `CariPrompt-2.2.10-macOS-AppleSilicon.dmg` | macOS 12 or newer, drag-and-drop installation |
+| macOS — Apple Silicon (M1 to M4) | `CariPrompt-2.2.10-macOS-AppleSilicon.zip` | Same app, without the disk image |
+| Windows 10 / 11 (Intel, AMD) | `CariPrompt-2.2.10-Windows-Setup.exe` | Standard installer |
+| Windows 10 / 11 (Intel, AMD) | `CariPrompt-2.2.10-Windows-Portable.exe` | No installation, runs directly |
+| Windows 11 ARM64 (Snapdragon, VM on an Apple Silicon Mac) | `CariPrompt-2.2.10-Windows-ARM64-Setup.exe` | Installer — **without transcription or voice tracking** |
+| Windows 11 ARM64 | `CariPrompt-2.2.10-Windows-ARM64-Portable.exe` | No installation — **without transcription or voice tracking** |
+| Linux x86_64 | `CariPrompt-2.2.10-Linux-x86_64.AppImage` | All distributions |
+| Linux ARM64 (aarch64) | `CariPrompt-2.2.10-Linux-arm64.AppImage` | 64-bit Raspberry Pi, ARM VM, Asahi |
 
 > Since 2.0.2, only **Apple Silicon** Macs (M1 and later) are provided: menu  › **About This Mac**, **Chip** line. On an Intel Mac, the app builds from source with `MAC_ARCHS=x64 npm run dist:mac`.
 
@@ -272,26 +280,25 @@ xattr -cr /Applications/CariPrompt.app
 
 ### Windows
 
-1. Run `CariPrompt-2.2.2-Windows-Setup.exe` (or the portable version).
+1. Run `CariPrompt-2.2.10-Windows-Setup.exe` (or the portable version; on an ARM64 machine, the `-Windows-ARM64-` files).
 2. **Windows protected your PC** (SmartScreen) appears: click **More info**, then **Run anyway**.
 3. The installer lets you choose the installation folder. A shortcut is created in the Start menu and on the desktop.
 
 ### Linux
 
-**AppImage**:
+**AppImage** — one file, all distributions:
 
 ```bash
-chmod +x CariPrompt-2.2.2-Linux-x86_64.AppImage
-./CariPrompt-2.2.2-Linux-x86_64.AppImage
+chmod +x CariPrompt-2.2.10-Linux-x86_64.AppImage
+./CariPrompt-2.2.10-Linux-x86_64.AppImage
 ```
 
-Some recent distributions require the FUSE 2 library (`sudo apt install libfuse2t64` on Ubuntu 24.04).
+> [!NOTE]
+> On Fedora and derivatives, AppImages require FUSE 2, absent by default: `sudo dnf install fuse`. Without it, the app still launches with `./CariPrompt-2.2.10-Linux-x86_64.AppImage --appimage-extract-and-run`.
 
-**.deb package**:
+On an ARM machine (64-bit Raspberry Pi, ARM VM on an Apple Silicon Mac), take `CariPrompt-2.2.10-Linux-arm64.AppImage`: an x86_64 binary will not start on an ARM processor, whatever the format.
 
-```bash
-sudo apt install ./CariPrompt-2.2.2-Linux-amd64.deb
-```
+For integration into the applications menu, [Gear Lever](https://github.com/mijorus/gearlever) installs an AppImage cleanly.
 
 ## Getting started
 
@@ -404,7 +411,15 @@ The details are in the [CHANGELOG](CHANGELOG.md).
 
 | Version | Technology | Platforms | Main changes |
 |---|---|---|---|
-| **2.2.2** | Electron | macOS Apple Silicon, Windows, Linux | macOS vibrancy on the columns, preview better set apart, README in five languages |
+| **2.2.10** | Electron | macOS Apple Silicon, Windows (Intel and ARM64), Linux (x86_64 and ARM64) | Windows start-up: no more silent failure, a window and a log when something goes wrong |
+| 2.2.9 | Electron | macOS Apple Silicon, Windows (Intel and ARM64), Linux (x86_64 and ARM64) | The version number opens the list of published releases |
+| 2.2.8 | Electron | macOS Apple Silicon, Windows (Intel and ARM64), Linux (x86_64 and ARM64) | Updates carried by the version number, preview hairline removed |
+| 2.2.7 | Electron | macOS Apple Silicon, Windows (Intel and ARM64), Linux (x86_64 and ARM64) | A single bundled script, smoothed voice-tracking scroll |
+| 2.2.6 | Electron | macOS Apple Silicon, Windows (Intel and ARM64), Linux (x86_64 and ARM64) | Three tabs, shortcuts on ⌘/, speaker colours in a selection bubble, status pill removed |
+| 2.2.5 | Electron | macOS Apple Silicon, Windows (Intel and ARM64), Linux (x86_64 and ARM64) | Speed in the transport bar, voice tracking without back-and-forth, layout that holds in a narrow window |
+| 2.2.4 | Electron | macOS Apple Silicon, Windows (Intel and ARM64), Linux (x86_64 and ARM64) | macOS packages rebuilt |
+| 2.2.3 | Electron | macOS Apple Silicon, Windows (Intel and ARM64), Linux (x86_64 and ARM64) | Text above the preview, resizable and hideable columns, line-by-line voice tracking and retakes, ARM packages |
+| 2.2.2 | Electron | macOS Apple Silicon, Windows, Linux | macOS vibrancy on the columns, preview better set apart, README in five languages |
 | 2.2.1 | Electron | macOS Apple Silicon, Windows, Linux | Cut-out icon, tabs on a single line in every language, translucent columns on macOS |
 | 2.2.0 | Electron | macOS Apple Silicon, Windows, Linux | Tabbed settings panel, collapsible blocks, customizable tab, update check, .dmg image, lighter app |
 | 2.1.0 | Electron | macOS Apple Silicon, Windows, Linux | Multilingual "Welcome" script and bundled test scripts; shortcuts for voice tracking and recording |
@@ -436,7 +451,7 @@ Versions 1.0 and 1.1 (native macOS) are superseded by the Electron version. On a
 - **Remaining timecode**: an estimate based on the current speed, it changes if the speed changes.
 - **Trackpad**: inertia cannot be told apart from a deliberate gesture, so the rate of speed changes is limited.
 - **No automatic update**: new versions are to be downloaded from the Releases.
-- **Linux**: only the x86_64 architecture is provided.
+- **Windows ARM64**: the speech-recognition library is not published for this architecture. Take transcription and voice tracking are unavailable there; everything else works.
 - **Voice tracking**: you have to read the script. An improvisation that strays from it puts tracking in the "lost" state (orange button): the text waits for the voice to find the script again. A sentence repeated elsewhere in the script can, rarely, pull tracking over; it re-syncs at the next sentence.
 - **Transcription**: Whisper does not provide the timestamp of each word with these models, only that of each segment. Subtitle splitting inside a segment is therefore proportional, realigned on the silences detected. The filler word and repetition counts are minimums (see above).
 - **AI writing**: the figure check compares strings of digits, not values. "10000" rewritten as "10 000" is flagged wrongly; conversely, a figure moved into another sentence of the same paragraph goes unnoticed. A closing parenthesis in a URL (`…/Page_(X)`) is taken for punctuation.
@@ -458,7 +473,9 @@ Building the packages (written to `release/`):
 |---|---|---|
 | `npm run dist:mac` | Ad-hoc signed Apple Silicon `.zip` (`MAC_ARCHS=x64` for Intel) | macOS or Linux (with [rcodesign](https://github.com/indygreg/apple-platform-rs)) |
 | `npm run dist:win` | NSIS installer and portable version | Windows, or Linux/macOS with Wine |
-| `npm run dist:linux` | AppImage and `.deb` | Linux |
+| `npm run dist:linux` | AppImage x86_64 | Linux |
+| `npm run dist:linux-arm64` | AppImage ARM64 | Linux |
+| `npm run dist:win-arm64` | Windows ARM64 installer and portable | Windows |
 
 On a Mac, `build.command` chains the dependency installation and the package building.
 

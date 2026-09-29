@@ -5,6 +5,9 @@ export type TextAlign = 'left' | 'center';
 
 export type TimecodeMode = 'off' | 'elapsed' | 'remaining' | 'both';
 export type WheelMode = 'navigate' | 'speed';
+export type PreviewSource = 'output' | 'window';
+/** Texte et aperçu empilés (haut/bas) ou côte à côte (gauche/droite) */
+export type SplitDirection = 'rows' | 'columns';
 
 // MARK: - Prises
 
@@ -76,50 +79,63 @@ export const PAUSE_THRESHOLD = 0.4;
 export const TAKE_EXT = 'wav';
 
 /** Blocs du panneau de réglages */
+// La vitesse a quitté le panneau depuis la 2.2.5 : elle est dans la barre de
+// transport, sous l'aperçu, donc à portée même quand les deux colonnes
+// latérales sont masquées.
 export type InspectorBlockId =
-  | 'speed' | 'target' | 'typography' | 'colors'
-  | 'layout' | 'timecode' | 'output' | 'takes' | 'transcription' | 'ai' | 'clicker' | 'controls';
+  | 'target' | 'layout' | 'output' | 'takes' | 'transcription' | 'ai' | 'clicker' | 'controls' | 'presets';
 
-/** Onglets du panneau de réglages ; « custom » est libre, les autres ont des blocs attitrés */
-export type InspectorTabId = 'essentials' | 'layout' | 'transcript' | 'aitools' | 'custom';
-export const INSPECTOR_TABS: InspectorTabId[] = ['essentials', 'layout', 'transcript', 'aitools', 'custom'];
+/**
+ * Onglets du panneau de réglages — trois depuis la 2.2.6.
+ *
+ * Les cinq précédents comptaient deux onglets d'un seul bloc et un onglet
+ * personnalisé vide au départ : une rangée permanente et un clic pour rien. Les
+ * trois qui restent portent chacun un sujet, et n'importe quel bloc peut être
+ * déplacé de l'un à l'autre — la personnalisation n'a plus besoin d'un onglet
+ * à elle.
+ */
+export type InspectorTabId = 'display' | 'playback' | 'tools';
+export const INSPECTOR_TABS: InspectorTabId[] = ['display', 'playback', 'tools'];
 
-/** Répartition par défaut ; l'onglet personnalisé démarre vide */
+/** Répartition par défaut ; l'utilisateur peut déplacer n'importe quel bloc */
 export const DEFAULT_LAYOUT: Record<InspectorTabId, InspectorBlockId[]> = {
-  essentials: ['output', 'speed', 'target', 'controls', 'clicker'],
-  layout: ['typography', 'colors', 'layout', 'timecode'],
-  transcript: ['takes', 'transcription'],
-  aitools: ['ai'],
-  custom: [],
+  display: ['output', 'layout', 'presets'],
+  playback: ['target', 'controls', 'clicker'],
+  tools: ['takes', 'transcription', 'ai'],
 };
 
 export const INSPECTOR_BLOCKS: InspectorBlockId[] = INSPECTOR_TABS.flatMap((tab) => DEFAULT_LAYOUT[tab]);
 
-/** Onglet d'origine d'un bloc */
+/** Onglet d'origine d'un bloc, celui où il revient quand on l'enlève d'un autre */
 export function homeTab(id: InspectorBlockId): InspectorTabId {
-  return INSPECTOR_TABS.find((tab) => DEFAULT_LAYOUT[tab].includes(id)) ?? 'custom';
+  return INSPECTOR_TABS.find((tab) => DEFAULT_LAYOUT[tab].includes(id)) ?? 'display';
 }
 
 export type InspectorLayout = Record<InspectorTabId, InspectorBlockId[]>;
 
-/** Disposition valide : blocs connus, sans doublon, chaque onglet fixe complété par les siens */
+/**
+ * Disposition valide : blocs connus, chacun dans un seul onglet. Un bloc que la
+ * disposition enregistrée ne place nulle part — version antérieure, onglet
+ * disparu, réglages abîmés — retrouve son onglet d'origine.
+ */
 export function sanitizeLayout(value: unknown): InspectorLayout {
   const src = (value ?? {}) as Record<string, unknown>;
-  const read = (tab: InspectorTabId, allowed: (id: InspectorBlockId) => boolean): InspectorBlockId[] => {
-    const seen = new Set<InspectorBlockId>();
+  const out = {} as InspectorLayout;
+  const placed = new Set<InspectorBlockId>();
+  for (const tab of INSPECTOR_TABS) {
+    const kept: InspectorBlockId[] = [];
     const list = Array.isArray(src[tab]) ? (src[tab] as unknown[]) : [];
     for (const v of list) {
       const id = v as InspectorBlockId;
-      if (typeof v === 'string' && INSPECTOR_BLOCKS.includes(id) && allowed(id)) seen.add(id);
+      if (typeof v === 'string' && INSPECTOR_BLOCKS.includes(id) && !placed.has(id)) {
+        placed.add(id);
+        kept.push(id);
+      }
     }
-    return [...seen];
-  };
-  const out = {} as InspectorLayout;
-  for (const tab of INSPECTOR_TABS) {
-    if (tab === 'custom') { out.custom = read('custom', () => true); continue; }
-    const kept = read(tab, (id) => homeTab(id) === tab);
-    for (const id of DEFAULT_LAYOUT[tab]) if (!kept.includes(id)) kept.push(id);
     out[tab] = kept;
+  }
+  for (const id of INSPECTOR_BLOCKS) {
+    if (!placed.has(id)) out[homeTab(id)].push(id);
   }
   return out;
 }
@@ -236,7 +252,17 @@ export interface Settings extends ProjectSettings {
   outputDisplayId: number | null;
   selectedScriptId: string | null;
   showInspector: boolean;
+  /** Colonne des textes : visible, et largeur */
+  showSidebar: boolean;
+  sidebarWidth: number;
+  /** Disposition du texte et de l'aperçu */
+  splitDirection: SplitDirection;
+  /** Hauteur de la zone d'édition quand elle est au-dessus de l'aperçu */
+  editorHeight: number;
+  /** Largeur de la zone d'édition quand elle est à gauche de l'aperçu */
   editorWidth: number;
+  /** Aperçu : rendu à l'échelle de l'écran de sortie, ou recalculé pour le panneau */
+  previewSource: PreviewSource;
   language: Lang;
   theme: ThemeMode;
   /** Textes de bienvenue anglais + français déjà ajoutés à la bibliothèque */
@@ -247,8 +273,6 @@ export interface Settings extends ProjectSettings {
   inspectorTab: InspectorTabId;
   /** Vérifier au lancement si une version plus récente est publiée */
   updateCheck: boolean;
-  /** Dernière version publiée déjà signalée, pour ne pas répéter l'annonce */
-  updateSeen: string;
 }
 
 /** Réponse de la vérification de mise à jour */
@@ -335,7 +359,13 @@ export interface ImportResult {
 
 export type MenuCommand =
   | 'new' | 'import' | 'export' | 'duplicate' | 'rewind' | 'toggleOutput' | 'togglePlay'
-  | 'saveProject' | 'openProject' | 'toggleFullscreen' | 'toggleTracking' | 'toggleRecording';
+  | 'saveProject' | 'openProject' | 'toggleFullscreen' | 'toggleTracking' | 'toggleRecording'
+  | 'toggleUpdateCheck';
+
+/** État que le menu ☰ doit refléter au moment où il s'ouvre */
+export interface AppMenuState {
+  updateCheck: boolean;
+}
 
 export interface ProjectReadResult {
   name: string;
@@ -382,7 +412,9 @@ export function countWords(text: string): number {
 }
 
 export function progressAt(pb: Playback, now: number): number {
-  if (!pb.isPlaying || !(pb.totalDuration > 0) || !Number.isFinite(pb.totalDuration)) return pb.anchorProgress;
+  // Une durée négative fait reculer le texte : le suivi vocal s'en sert quand
+  // le lecteur reprend une phrase, pour revenir en glissant au lieu de sauter.
+  if (!pb.isPlaying || pb.totalDuration === 0 || !Number.isFinite(pb.totalDuration)) return pb.anchorProgress;
   return clamp(pb.anchorProgress + (now - pb.anchorTime) / 1000 / pb.totalDuration, 0, 1);
 }
 

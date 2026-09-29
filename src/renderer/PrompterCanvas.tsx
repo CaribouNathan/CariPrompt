@@ -138,6 +138,15 @@ export function PrompterCanvas({ state, lang, width, height, mirror, onMetrics }
 
     onMetrics({
       progressForOffset: (offset) => measure()?.progressAtOffset(offset) ?? null,
+      // Hauteur d'une ligne rapportée à la course totale : le pas du suivi vocal
+      lineStep: () => {
+        const el = textRef.current;
+        if (!el) return null;
+        const st = stateRef.current.style;
+        const line = st.fontSize * st.lineHeight;
+        const travel = Math.max(el.offsetHeight - line, 1);
+        return Math.min(1, line / travel);
+      },
       stops: () => {
         const m = measure();
         if (!m) return [0];

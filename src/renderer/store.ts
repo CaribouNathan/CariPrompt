@@ -6,7 +6,7 @@ import { audioMime } from './wav';
 import { assemble, prepare } from './aiText';
 import { analyzeSpeech, guessLanguage } from './speechAnalysis';
 import { buildCues, mergeCues, splitCue, toSrt } from './subtitles';
-import { LiveAligner } from './liveAlign';
+import { LiveAligner, ReadingEstimate, smoothRate, trackingRate } from './liveAlign';
 import { createTap, type PcmTap } from './pcmTap';
 import {
   autoTitle, clamp, countWords, DEFAULT_LINE_HEIGHT, DEFAULT_SPEED, FONT_MAX, FONT_MIN, FONT_STEP,
@@ -64,14 +64,18 @@ export const DEFAULT_SETTINGS: Settings = {
   outputDisplayId: null,
   selectedScriptId: null,
   showInspector: true,
-  editorWidth: 380,
+  showSidebar: true,
+  sidebarWidth: 236,
+  splitDirection: 'rows',
+  editorHeight: 300,
+  editorWidth: 420,
+  previewSource: 'output',
   language: 'en',
   theme: 'system',
   welcomeSeeded: false,
   seedVersion: 0,
-  inspectorTab: 'essentials',
+  inspectorTab: 'display',
   updateCheck: true,
-  updateSeen: '',
 };
 
 /** Écrit la liste d'un onglet dans la disposition */
@@ -151,24 +155,36 @@ function newScript(text = '', speed = DEFAULT_SPEED, title?: string, lang?: Lang
   };
 }
 
-const SEED_VERSION = 2;
+const SEED_VERSION = 4;
 const WELCOME_TITLE = 'Welcome';
 
-/** Script « Welcome » puis un script de test par langue */
+/** Seul texte fourni depuis la 2.2.7 : « Welcome », dans les cinq langues */
 function seedScripts(): Script[] {
   const welcome = LANGUAGES.map((l) => tr(l.id, 'welcomeText')).join('\n\n');
-  return [
-    newScript(welcome, DEFAULT_SPEED, WELCOME_TITLE),
-    ...LANGUAGES.map((l) => newScript(tr(l.id, 'testScriptText'), DEFAULT_SPEED, tr(l.id, 'testScriptTitle'), l.id)),
-  ];
+  return [newScript(welcome, DEFAULT_SPEED, WELCOME_TITLE)];
+}
+
+/**
+ * Script de test fourni par une version antérieure, jamais modifié.
+ *
+ * Ils encombraient la liste à la première ouverture alors qu'ils n'ont servi
+ * qu'une fois. Retouché — texte, titre ou couleurs — un script reste : c'est
+ * devenu celui de l'utilisateur.
+ */
+function isPristineTestScript(s: Script): boolean {
+  if (s.updatedAt !== s.createdAt || (s.marks?.length ?? 0) > 0) return false;
+  return LANGUAGES.some((l) => s.text === tr(l.id, 'testScriptText') && s.title === tr(l.id, 'testScriptTitle'));
 }
 
 /** Ancien texte de bienvenue (≤ 2.0) jamais modifié par l'utilisateur */
 function isPristineOldWelcome(s: Script): boolean {
   if (s.text === tr('en', 'sampleText') || s.text === tr('fr', 'sampleText')) return true;
   const head = s.text.trimStart();
-  return (head.startsWith('Hello and welcome.') || head.startsWith('Bonjour et bienvenue.'))
-    && s.updatedAt === s.createdAt && (s.marks?.length ?? 0) === 0;
+  if ((head.startsWith('Hello and welcome.') || head.startsWith('Bonjour et bienvenue.'))
+    && s.updatedAt === s.createdAt && (s.marks?.length ?? 0) === 0) return true;
+  // Texte de bienvenue d'une version antérieure, jamais touché : il décrit une
+  // interface qui n'existe plus et peut céder la place. Modifié, il reste.
+  return s.title === WELCOME_TITLE && s.updatedAt === s.createdAt && (s.marks?.length ?? 0) === 0;
 }
 
 /** Vitesse demandée par la durée cible (non bornée) */
@@ -217,6 +233,8 @@ export function textStyle(st: Settings): TextStyle {
 export interface PreviewMetrics {
   stops: () => number[];
   progressForOffset: (offset: number) => number | null;
+  /** Hauteur d'une ligne, en progression (0–1) */
+  lineStep: () => number | null;
 }
 let previewMetrics: PreviewMetrics | null = null;
 export function registerPreviewMetrics(m: PreviewMetrics | null) {
@@ -234,6 +252,8 @@ interface State {
   banner: Banner | null;
   editing: boolean;
   dropActive: boolean;
+  /** Feuille des raccourcis clavier, ouverte sur ⌘/ */
+  shortcutsOpen: boolean;
   /** Textes sélectionnés dans la colonne de gauche (le dernier est celui chargé) */
   selectedIds: string[];
   blackout: boolean;
@@ -307,8 +327,7 @@ interface Actions {
   resetColors(): void;
   moveInspectorBlock(tab: InspectorTabId, from: InspectorBlockId, to: InspectorBlockId): void;
   resetInspectorOrder(tab: InspectorTabId): void;
-  addCustomBlock(id: InspectorBlockId): void;
-  removeCustomBlock(id: InspectorBlockId): void;
+  moveBlockToTab(id: InspectorBlockId, tab: InspectorTabId): void;
   toggleBlockCollapsed(key: string): void;
   checkUpdate(silent?: boolean): Promise<void>;
   loadFonts(): Promise<string[]>;
@@ -390,6 +409,7 @@ interface Actions {
   /** Usage interne : applique une modification à une prise et l'enregistre */
   _mutateTake(id: string, fn: (t: Take) => Take): void;
   setDropActive(v: boolean): void;
+  setShortcutsOpen(v: boolean): void;
   applyPrefs(p: Prefs): void;
   flush(): Promise<void>;
 }
@@ -507,9 +527,12 @@ let trackSpeaking = false;
 let lastSpeechAt = 0;
 let lastMatchAt = 0;
 let lastApplied = 0;
+/** Vitesse de défilement réellement appliquée, lissée d'un pas à l'autre */
+let appliedRate = 0;
 const TICK_MS = 100;
-/** Délai de rattrapage de l'écart, en secondes : plus court, le texte sautille ; plus long, il traîne */
-const TAU = 0.7;
+/** Position de lecture estimée, en mots */
+const estimate = new ReadingEstimate();
+
 
 async function startTrackingCapture(deviceId: string): Promise<void> {
   const stream = await navigator.mediaDevices.getUserMedia({
@@ -539,6 +562,8 @@ function stopTracking(): void {
   aligner = null;
   alignerScriptId = null;
   trackSpeaking = false;
+  estimate.reset();
+  appliedRate = 0;
 }
 
 /** Progression (0–1) qui amène une position du texte, en caractères, sur la ligne de lecture */
@@ -565,6 +590,8 @@ function resetAlignerToReadingLine(): void {
     else hi = mid - 1;
   }
   aligner.reset(p <= 0.0005 ? -1 : lo - 1);
+  estimate.reset();
+  appliedRate = 0;
   // Avant la première mesure, le meilleur indice du débit est la vitesse réglée du texte
   const wps = (effectiveSpeed(cur) * WPM_PER_SPEED) / 60;
   if (wps > 0.5) aligner.rate = Math.min(5, wps);
@@ -587,10 +614,11 @@ function onHypothesis(text: string, audioEnd: number): void {
 }
 
 /**
- * Régulation : toutes les 100 ms, le débit de défilement devient le rythme
- * du lecteur plus une correction de l'écart entre la ligne de lecture et le
- * mot prononcé (estimé, latence de Whisper comprise). En silence, le texte
- * finit le mot en cours puis s'arrête.
+ * Régulation, dix fois par seconde. La cible n'est pas le mot prononcé mais la
+ * ligne qui le contient : le texte se cale ligne à ligne, comme un prompteur
+ * tenu à la main. Le rattrapage est proportionnel à l'écart, ce qui donne un
+ * départ et un arrêt progressifs — le texte glisse au lieu de sauter, en avant
+ * comme en arrière quand le lecteur reprend une phrase.
  */
 function trackingTick(): void {
   const st = useStore.getState();
@@ -604,33 +632,34 @@ function trackingTick(): void {
   if (st.trackStatus === 'following' && speaking && now - lastMatchAt > 4000) useStore.setState({ trackStatus: 'lost' });
   else if (st.trackStatus === 'lost' && now - lastMatchAt < 4000) useStore.setState({ trackStatus: 'following' });
 
-  const word = aligner.predict(now, speaking);
+  const word = estimate.update(aligner, now, speaking);
   const pb = st.playback;
   const progress = progressAt(pb, now);
+  const line = previewMetrics?.lineStep() ?? 0.02;
   let rate = 0;
+
   if (word >= 0) {
-    const len = cur.text.length;
-    const target = progressOfChar(aligner.charAt(word), len);
-    const perWord = Math.max(1e-6, (progressOfChar(aligner.charAt(word + 10), len) - target) / 10);
-    const err = target - progress;
-    // Le lecteur est revenu en arrière de plus d'une ligne environ : on y saute directement
-    if (err < -perWord * 12) {
-      useStore.setState({ playback: { ...pb, anchorProgress: target, anchorTime: now, totalDuration: Infinity, displayDuration: totalDuration(cur) } });
+    // Cible : la ligne qui porte le mot prononcé. Deux mots de la même ligne
+    // donnent la même progression, d'où le calage par ligne.
+    const target = progressOfChar(aligner.charAt(word), cur.text.length);
+    const decision = trackingRate(target - progress, line);
+    if (decision.jump) {
+      useStore.setState({
+        playback: { ...pb, anchorProgress: target, anchorTime: now, totalDuration: Infinity, displayDuration: totalDuration(cur) },
+      });
+      appliedRate = 0;
       lastApplied = now;
       return;
     }
-    const base = speaking ? aligner.rate * perWord : 0;
-    rate = Math.max(0, base + err / TAU);
-    // Plafond : un saut de passage se rattrape vite, sans téléporter le texte
-    rate = Math.min(rate, perWord * 25);
+    rate = decision.rate;
   }
 
-  const duration = rate > 1e-7 ? 1 / rate : Infinity;
-  const old = pb.totalDuration;
-  const changed = !Number.isFinite(old) || !Number.isFinite(duration)
-    ? Number.isFinite(old) !== Number.isFinite(duration)
-    : Math.abs(duration - old) / old > 0.03;
-  if (!changed && now - lastApplied < 1000) return;
+  // La consigne est rejointe progressivement, et la vitesse obtenue est
+  // reposée à chaque pas : c'est le lissage qui rend le défilement continu, il
+  // ne supporte pas qu'on ne l'applique qu'au-delà d'un seuil de changement.
+  const dt = lastApplied ? Math.min(0.5, (now - lastApplied) / 1000) : TICK_MS / 1000;
+  appliedRate = smoothRate(appliedRate, rate, dt);
+  const duration = Math.abs(appliedRate) > 1e-7 ? 1 / appliedRate : Infinity;
   lastApplied = now;
   useStore.setState({
     playback: { ...pb, anchorProgress: progress, anchorTime: now, totalDuration: duration, displayDuration: totalDuration(cur) },
@@ -718,6 +747,7 @@ export const useStore = create<State & Actions>()((set, get) => {
     banner: null,
     editing: false,
     dropActive: false,
+    shortcutsOpen: false,
     selectedIds: [],
     blackout: false,
     fullscreen: false,
@@ -760,18 +790,17 @@ export const useStore = create<State & Actions>()((set, get) => {
       // Scripts de test de la 2.1.0 : on leur attache leur langue pour afficher le drapeau
       scripts = scripts.map((x) => (x.lang ? x : { ...x, lang: LANGUAGES.find((l) => tr(l.id, 'testScriptText') === x.text)?.id }));
 
-      // Textes fournis : « Welcome » (toutes les langues) et un script de test par langue.
-      // Ajoutés une seule fois ; les anciens textes de bienvenue ne sont retirés que s'ils sont intacts.
+      // Seul texte fourni : « Welcome ». Les textes d'une version antérieure que
+      // l'utilisateur n'a jamais touchés cèdent la place ; ceux qu'il a modifiés
+      // restent, et un texte de bienvenue déjà présent n'est jamais doublé.
       if ((settings.seedVersion ?? 0) < SEED_VERSION || scripts.length === 0) {
         const fresh = scripts.length === 0;
-        const before = scripts.length;
         const selectedGone = () => !scripts.some((x) => x.id === settings.selectedScriptId);
-        scripts = scripts.filter((x) => !isPristineOldWelcome(x));
-        const removed = scripts.length < before;
-        const added = seedScripts().filter((n) => !scripts.some((x) => x.text === n.text));
+        scripts = scripts.filter((x) => !isPristineOldWelcome(x) && !isPristineTestScript(x));
+        const added = scripts.some((x) => x.title === WELCOME_TITLE) ? [] : seedScripts();
         scripts = [...added, ...scripts];
         const welcome = added.find((x) => x.title === WELCOME_TITLE);
-        if (welcome && (fresh || (removed && selectedGone()))) settings.selectedScriptId = welcome.id;
+        if (welcome && (fresh || selectedGone())) settings.selectedScriptId = welcome.id;
         settings.seedVersion = SEED_VERSION;
         settings.welcomeSeeded = true;
       }
@@ -1016,14 +1045,14 @@ export const useStore = create<State & Actions>()((set, get) => {
       setLayout(set, tab, [...DEFAULT_LAYOUT[tab]]);
     },
 
-    addCustomBlock(id) {
-      const custom = get().settings.inspectorLayout.custom ?? [];
-      if (custom.includes(id)) return;
-      setLayout(set, 'custom', [...custom, id]);
-    },
-
-    removeCustomBlock(id) {
-      setLayout(set, 'custom', (get().settings.inspectorLayout.custom ?? []).filter((x) => x !== id));
+    /** Déplace un bloc dans un onglet : il quitte celui où il se trouvait */
+    moveBlockToTab(id, tab) {
+      const layout = get().settings.inspectorLayout;
+      if ((layout[tab] ?? []).includes(id)) return;
+      const next = {} as Settings['inspectorLayout'];
+      for (const key of INSPECTOR_TABS) next[key] = (layout[key] ?? []).filter((x) => x !== id);
+      next[tab] = [...next[tab], id];
+      set((st) => ({ settings: { ...st.settings, inspectorLayout: next } }));
     },
 
     toggleBlockCollapsed(key) {
@@ -1047,8 +1076,10 @@ export const useStore = create<State & Actions>()((set, get) => {
         return;
       }
       if (info.newer) {
-        if (silent && get().settings.updateSeen === info.version) return;
-        set((st) => ({ settings: { ...st.settings, updateSeen: info.version }, update: info }));
+        // Signalée à chaque lancement tant qu'elle est là : le numéro de version
+        // reste bleu, sans rien réclamer. Une version « déjà vue » n'a plus de
+        // sens depuis que l'annonce ne coûte plus une ligne de panneau.
+        set({ update: info });
       } else if (!silent) {
         set({ update: info });
         get().showBanner(t('updateNone', { version: get().info.version }));
@@ -1826,6 +1857,7 @@ export const useStore = create<State & Actions>()((set, get) => {
       api.saveTakes(takes).catch(() => undefined);
     },
     setDropActive(v) { set({ dropActive: v }); },
+    setShortcutsOpen(v) { set({ shortcutsOpen: v }); },
 
     applyPrefs(p) {
       set((st) => ({ settings: { ...st.settings, language: p.language, theme: p.theme } }));

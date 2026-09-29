@@ -211,3 +211,23 @@ export const IconFlag = ({ lang, size = 14 }: { lang: string; size?: number }) =
     </svg>
   );
 };
+
+export const IconSidebarLeft = (p: P) => (
+  <svg {...base(p)}><rect x="3" y="4.5" width="18" height="15" rx="2.5" /><path d="M9.5 4.5v15" /></svg>
+);
+
+export const IconRows = (p: P) => (
+  <svg {...base(p)}><rect x="3" y="4" width="18" height="7" rx="1.8" /><rect x="3" y="13" width="18" height="7" rx="1.8" /></svg>
+);
+
+export const IconColumns = (p: P) => (
+  <svg {...base(p)}><rect x="3" y="4" width="7.5" height="16" rx="1.8" /><rect x="13.5" y="4" width="7.5" height="16" rx="1.8" /></svg>
+);
+
+export const IconChevronLeft = (p: P) => (
+  <svg {...base(p)}><path d="M14.5 5.5 8 12l6.5 6.5" /></svg>
+);
+
+export const IconChevronRight = (p: P) => (
+  <svg {...base(p)}><path d="M9.5 5.5 16 12l-6.5 6.5" /></svg>
+);

@@ -113,6 +113,7 @@ export function installOperatorInput() {
       else if (k === 'z' && !e.shiftKey) s.undo();
       else if (k === 'z' && e.shiftKey) s.redo();
       else if (k === 'y' && !isMac) s.redo();
+      else if (e.key === '/') s.setShortcutsOpen(!s.shortcutsOpen);
       else if (k === 'q' && !isMac) window.close();
       else handled = false;
       if (handled) { e.preventDefault(); return; }
@@ -123,7 +124,8 @@ export function installOperatorInput() {
     }
 
     if (e.key === 'Escape') {
-      if (editing) (e.target as HTMLElement).blur();
+      if (s.shortcutsOpen) s.setShortcutsOpen(false);
+      else if (editing) (e.target as HTMLElement).blur();
       else if (s.fullscreen) s.setFullscreen(false);
       e.preventDefault();
       return;
@@ -184,6 +186,9 @@ export function installOperatorInput() {
       case 'toggleFullscreen': s.setFullscreen(!s.fullscreen); break;
       case 'toggleTracking': s.toggleTracking(); break;
       case 'toggleRecording': s.toggleRecording(); break;
+      // Vérification au lancement : l'interrupteur vit dans le menu ☰ depuis la
+      // 2.2.8, le pied du panneau de réglages ayant disparu.
+      case 'toggleUpdateCheck': s.setSetting('updateCheck', !s.settings.updateCheck); break;
     }
   });
 }

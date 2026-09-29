@@ -1,7 +1,7 @@
 {
   "name": "cariprompt",
   "productName": "CariPrompt",
-  "version": "2.2.2",
+  "version": "2.2.10",
   "description": "Prompteur multi-écrans — Caribou Labs",
   "author": "Nathan Carrillat — Caribou Labs",
   "homepage": "https://github.com/CaribouNathan/CariPrompt",
@@ -36,9 +36,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && vite build && node scripts/build-main.mjs",
     "start": "npm run build && electron .",
-    "dist:linux": "npm run build && electron-builder --linux --x64",
-    "dist:win": "npm run build && node scripts/fetch-natives.mjs win-x64 && electron-builder --win --x64",
-    "dist:mac": "npm run build && node scripts/package-mac.mjs"
+    "dist:linux": "npm run build && node scripts/package-linux.mjs x64",
+    "dist:win": "npm run build && node scripts/package-win.mjs x64",
+    "dist:mac": "npm run build && node scripts/package-mac.mjs",
+    "dist:linux-arm64": "npm run build && node scripts/package-linux.mjs arm64",
+    "dist:win-arm64": "npm run build && node scripts/package-win.mjs arm64",
+    "test:tracking": "esbuild tests/tracking.ts --bundle --platform=node --outfile=node_modules/.cache/tracking.mjs --format=esm --log-level=error && node node_modules/.cache/tracking.mjs"
   },
   "build": {
     "appId": "com.cariboulabs.cariprompt",
@@ -82,8 +85,7 @@
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        "AppImage"
       ],
       "icon": "build/icons",
       "category": "AudioVideo",
@@ -99,10 +101,7 @@
       ]
     },
     "appImage": {
-      "artifactName": "${productName}-${version}-Linux-x86_64.${ext}"
-    },
-    "deb": {
-      "artifactName": "${productName}-${version}-Linux-amd64.${ext}"
+      "artifactName": "${productName}-${version}-Linux-${arch}.${ext}"
     },
     "fileAssociations": [
       {

@@ -3,6 +3,105 @@
 Toutes les évolutions notables de CariPrompt sont listées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et la numérotation suit le [versionnage sémantique](https://semver.org/lang/fr/).
 
+## [2.2.10] — 2026-09-28
+
+### Corrigé
+- **Démarrage sous Windows : fin de l'échec silencieux.** L'application pouvait ne rien afficher du tout, sans message et sans journal — un double-clic sans effet. Trois défauts s'additionnaient :
+  - la fenêtre n'était montrée qu'au premier rendu de l'interface ; si ce rendu n'arrivait jamais — pilote graphique d'une machine virtuelle, processus d'affichage qui meurt — l'application restait un processus invisible. Passé huit secondes, la fenêtre est désormais montrée telle qu'elle est, et l'incident est écrit dans le journal ;
+  - ce processus invisible gardait le verrou d'instance unique, si bien que **tous les lancements suivants ne faisaient plus rien**, définitivement. Une fenêtre en vie mais cachée se montre maintenant quand on relance l'application ;
+  - aucune exception du démarrage n'était rattrapée : la création de la fenêtre, les exceptions non traitées et la perte du processus d'affichage sont journalisées et annoncées par une boîte de dialogue qui rappelle le chemin du journal.
+- **Couleur des boutons de fenêtre sous Windows.** Elle était transparente — huit chiffres hexadécimaux dont un canal alpha —, alors que Windows dessine ces boutons avec une couleur opaque. Elle prend le fond réel de l'application, identique à l'œil. C'est la cause la plus probable du démarrage muet, et elle ne concernait que Windows.
+
+Le journal se trouve dans `%APPDATA%\CariPrompt\cariprompt.log`.
+
+## [2.2.9] — 2026-09-28
+
+### Modifié
+- **Le numéro de version ouvre la liste des versions publiées**, et non plus la seule dernière.
+- **« Vérifier les mises à jour au lancement »** dans le menu ☰, au lieu de « Vérifier au lancement » : la case ne disait pas ce qu'elle vérifiait. Dans les cinq langues.
+
+### Corrigé
+- **Le numéro de version n'ouvrait rien quand une mise à jour existait.** Il suivait l'adresse renvoyée par GitHub — la page d'une version précise — que la liste blanche du processus principal n'autorise pas, et le clic restait sans effet. Le bouton mène désormais toujours à la même adresse, elle-même autorisée. L'épreuve rendait jusqu'ici une adresse déjà autorisée et passait à côté ; elle rend maintenant une page de version, comme GitHub.
+
+### Paquets
+Cette version est produite pour les quatre cibles : macOS Apple Silicon, Linux x86_64 (AppImage), Windows Intel/AMD (installeur et portable).
+
+## [2.2.8] — 2026-09-28
+
+### Modifié
+- **La mise à jour tient dans le numéro de version.** Le numéro, en haut à gauche, devient un bouton qui ouvre les versions publiées sur GitHub, et passe au bleu quand il en existe une plus récente — son infobulle donne alors le numéro trouvé. Le pied du panneau de réglages, qui portait « Vérifier les mises à jour », l'interrupteur de vérification au lancement et un bouton d'annonce, disparaît ; la pastille qui doublait le numéro aussi.
+- **L'interrupteur « Vérifier au lancement » passe dans le menu ☰**, en case à cocher. Il reste donc possible de couper la seule requête réseau que l'application fasse d'elle-même.
+- Une version plus récente est signalée à chaque lancement tant qu'elle existe, au lieu de l'être une seule fois : un numéro bleu ne réclame rien, il n'a pas besoin d'être tu après avoir été vu.
+
+### Corrigé
+- **Liseré clair au bas de l'aperçu.** Le cadre portait un contour d'un point, blanc à 10 % en thème sombre : contre le noir de l'aperçu, il dessinait un trait visible, surtout en bas. Le contour est retiré — le rectangle noir se détache seul de la teinte de la scène, dans les deux thèmes.
+
+## [2.2.7] — 2026-09-28
+
+### Modifié
+- **Un seul texte fourni : « Welcome ».** Les cinq scripts de test n'ont servi qu'une fois et encombraient la liste. Ceux des versions 2.1 à 2.2.6 sont retirés à la mise à jour **s'ils n'ont pas été touchés** ; un script dont le texte, le titre ou les couleurs ont été modifiés est devenu le vôtre et reste. Un texte de bienvenue déjà présent n'est plus jamais doublé par un nouveau.
+- **Défilement du suivi vocal lissé.** La régulation recalcule une consigne dix fois par seconde, et chaque hypothèse de la reconnaissance décale la cible d'un coup : la vitesse du texte changeait par paliers, le défilement partait, s'arrêtait, repartait. La vitesse rejoint désormais sa consigne progressivement, et le seuil de la zone morte est retranché de l'écart au lieu de le commander — à la sortie de la zone morte le texte démarre de zéro et accélère, au lieu de s'établir d'un coup à sa vitesse pleine. Sur huit lectures simulées, la plus grande variation de vitesse d'un pas à l'autre passe de 48,5 à 22 lignes par seconde carrée, et le texte n'est figé que 4 % du temps au lieu de 24 % avant la 2.2.5.
+
+### Corrigé
+- L'épreuve du suivi vocal exécutait huit fois la même lecture au lieu de huit lectures différentes : le paramètre de graine n'était pas passé. Les huit débits et latences annoncés sont maintenant réellement distincts.
+- La table d'historique des README ne gardait qu'une ligne pour toute la série 2.2.x, chaque version renommant la précédente. Les versions 2.2.3 à 2.2.6 y figurent de nouveau.
+
+## [2.2.6] — 2026-09-27
+
+Version d'allègement : à fonctions égales, moins d'éléments à l'écran en permanence.
+
+### Modifié
+- **Trois onglets** au lieu de cinq dans le panneau de réglages : **Affichage** (sortie, mise en page, préréglages), **Lecture** (durée cible, commandes, télécommande) et **Outils** (prises, transcription, IA). Deux des cinq précédents ne contenaient qu'un bloc et l'onglet personnalisé démarrait vide. N'importe quel bloc se déplace maintenant d'un onglet à l'autre — la personnalisation n'a plus besoin d'un onglet à elle — et le bouton de retrait le renvoie chez lui. Les dispositions enregistrées sont reprises ; un bloc qui ne trouve plus sa place retourne à son onglet d'origine.
+- **Les raccourcis clavier s'ouvrent sur ⌘/**, en surimpression, et par le bouton clavier en pied de la colonne des textes. La liste occupait jusqu'ici la moitié basse de cette colonne en permanence, rouverte à chaque lancement. La colonne est rendue aux textes.
+- **Les couleurs de locuteur apparaissent en bulle au-dessus de la sélection**, au lieu d'une barre permanente désactivée tant que rien n'était sélectionné. Annuler et rétablir rejoignent la ligne de typographie, désormais seule barre au-dessus du texte.
+- **Le choix de la définition d'aperçu** (écran de sortie / cette fenêtre) passe dans un coin de l'aperçu, discret au repos et net sous la souris.
+- **Miroir** : « miroir dans l'aperçu » et « miroir en plein écran » ne s'affichent que lorsque le miroir est actif, en retrait sous le mode qui les commande.
+
+### Supprimé
+- **La pastille d'état de la barre de titre.** Elle répétait la vitesse (dans le transport depuis la 2.2.5), la durée et le corps du texte. La durée rejoint le nombre de mots en pied d'éditeur, sous la forme déjà utilisée dans la liste des textes ; le point de sortie rejoint le bouton qui commande cette sortie.
+- **Les boutons Show output et Full screen du panneau de réglages**, qui doublaient ceux de la barre de titre.
+- Environ 80 lignes de CSS mort : règles d'états d'interface retirés depuis plusieurs versions, et un conteneur devenu vide.
+
+### Interne
+- `App.tsx` passe de 2 376 à 1 419 lignes : les prises, l'éditeur de sous-titres, la rédaction IA et les contrôles communs ont chacun leur fichier.
+- Trois épreuves ajoutées : la bulle de sélection (position et apparition), le semis des textes fournis (aucun doublon à la migration) et la couverture CSS.
+
+## [2.2.5] — 2026-09-27
+
+### Modifié
+- **La vitesse passe dans la barre de transport**, sur la même ligne que les commandes de lecture et à leur droite. Elle reste donc sous la main quand la colonne des textes et le panneau de réglages sont masqués — la position de travail d'un enregistrement. Le bloc Vitesse quitte le panneau de réglages ; les textes existants gardent la leur.
+- Quand la ligne se resserre, les libellés s'effacent avant que quoi que ce soit ne passe à la ligne : d'abord le mot « vitesse », puis les noms des boutons Suivi voix et Enreg. audio, qui gardent leur icône, leur infobulle et leur raccourci.
+
+### Corrigé
+- **Le texte n'avance plus par aller-retours pendant le suivi vocal.** La position de lecture était la dernière position reconnue prolongée au débit du lecteur : elle filait en avant entre deux hypothèses de la reconnaissance, puis retombait d'autant à l'arrivée de la suivante, et retombait d'un coup à chaque respiration. Le texte suivait ce mouvement de scie. L'estimation avance maintenant en continu et ne revient en arrière que sur une reprise avérée.
+- **Fenêtre étroite** : le panneau de réglages passait par-dessus l'éditeur, la pastille d'état recouvrait le numéro de version, et la barre de transport se désorganisait. L'affichage côte à côte repasse de lui-même en haut/bas sous la largeur vitale des deux panneaux, l'éditeur est ramené à la place disponible, et la pastille d'état occupe la place laissée entre le nom et les boutons au lieu d'être centrée sans égard pour eux.
+
+## [2.2.4] — 2026-09-27
+
+### Corrigé
+- **Paquets macOS reconstruits.** Les archives `.dmg` et `.zip` de la 2.2.3 contenaient une application antérieure aux dernières corrections d'interface : boutons Décompte et Timecode, chevron en tête de la colonne des textes, choix de disposition. Le script d'empaquetage réutilisait le dossier de sortie du passage précédent au lieu de reconstruire l'application, et fabriquait les archives à partir de ce dossier périmé, sans erreur visible. Il travaille désormais dans un dossier daté propre à chaque exécution, et remplace les archives au lieu d'y ajouter des fichiers.
+- Les paquets Windows et Linux de la 2.2.3 étaient corrects ; ils sont réédités à l'identique pour que toutes les plateformes portent le même numéro de version.
+
+## [2.2.3] — 2026-09-27
+
+### Ajouté
+- **Paquets ARM64** : Linux aarch64 et Windows ARM64, pour les machines ARM et les machines virtuelles sur Mac Apple Silicon. Un binaire x86_64 ne démarre pas sur un processeur ARM, quel que soit le format du paquet.
+- **Colonne des textes masquable** par le chevron en tête de colonne, avec une languette pour la ramener, et **largeur réglable** — le panneau de réglages, lui, garde sa largeur.
+- **Aperçu à la résolution de l'écran de sortie ou à celle du panneau**, au choix, par deux boutons au-dessus de l'aperçu.
+- **Deux vrais boutons dans la barre de titre** : **Décompte** et **Timecode**, ce dernier ouvrant le choix du mode (écoulé, restant, les deux, aucun) sans afficher son état à la place de son nom.
+- **Choix de la disposition** texte/aperçu : l'un au-dessus de l'autre, ou côte à côte, par deux icônes de la barre de titre.
+
+### Modifié
+- **Le texte passe au-dessus de l'aperçu** au lieu d'être à sa gauche, avec une poignée pour partager la hauteur.
+- **Police et taille du texte dans la fenêtre d'édition.** Les réglages de graisse, d'italique et de majuscules, ainsi que le bloc Couleurs, quittent l'interface ; l'application garde les valeurs par défaut et les projets existants conservent les leurs.
+- **Boutons Suivi voix et Enreg. audio compacts**, placés à droite des commandes de lecture, elles-mêmes ramenées à gauche.
+- **Suivi vocal ligne à ligne** : le texte se cale sur la ligne qui porte le mot prononcé et n'en bouge plus tant qu'elle est lue. Le rattrapage est proportionnel à l'écart : départ et arrêt progressifs, glissement façon jog plutôt que sauts.
+- **Reprises de phrases** : la fenêtre de recherche de l'alignement remonte plus de deux fois plus loin en arrière et une reprise nette ramène le texte en glissant — le cas courant d'un enregistrement de voix off.
+- **Linux : seule l'AppImage est fournie** (x86_64 et ARM64). Les paquets `.deb` et `.rpm` ne sont plus produits.
+
+### Corrigé
+- Le panneau de réglages était rogné quand la fenêtre devenait étroite. Sa largeur est désormais garantie, et la largeur minimale de la fenêtre passe de 1140 à 980 points.
+
 ## [2.2.2] — 2026-09-21
 
 ### Modifié

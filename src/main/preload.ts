@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type {
   SttErrorCode, SttModelId, SttModelInfo, SttProgress, Transcript,
   AiKeyStatus, AiModel, AiProgress, AiProvider, AiRunResult, AiTask, AiErrorCode,
-  AppInfo, ChoiceItem, DisplayInfo, ProjectFile, ProjectReadResult, Take, ForwardedInput, ImportResult, MenuCommand, OutputState, Prefs, UpdateInfo,
+  AppInfo, AppMenuState, ChoiceItem, DisplayInfo, ProjectFile, ProjectReadResult, Take, ForwardedInput, ImportResult, MenuCommand, OutputState, Prefs, UpdateInfo,
 } from '../shared/types';
 
 const on = <T>(channel: string, cb: (v: T) => void) => {
@@ -38,7 +38,7 @@ const api = {
   onPrefsChanged: (cb: (p: Prefs) => void) => on('prefs:changed', cb),
   choiceMenu: (items: ChoiceItem[], x: number, y: number): Promise<string | null> =>
     ipcRenderer.invoke('menu:choice', items, x, y),
-  openAppMenu: (x: number, y: number) => ipcRenderer.send('menu:app', x, y),
+  openAppMenu: (x: number, y: number, state: AppMenuState) => ipcRenderer.send('menu:app', x, y, state),
 
   onFlushRequest: (cb: () => void) => on('app:flush', cb),
   flushDone: () => ipcRenderer.send('app:flushDone'),

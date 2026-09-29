@@ -20,7 +20,7 @@ import {
   type Lang, type StringKey, type ThemeMode,
 } from '../shared/i18n';
 import type {
-  AppInfo, ChoiceItem, DisplayInfo, ForwardedInput, ImportResult, MenuCommand, OutputState, Prefs,
+  AppInfo, AppMenuState, ChoiceItem, DisplayInfo, ForwardedInput, ImportResult, MenuCommand, OutputState, Prefs,
   ProjectFile, ProjectReadResult, Take, AiProvider, AiTask, SttModelId, UpdateInfo,
 } from '../shared/types';
 import { AI_BILLING_URLS } from '../shared/types';
@@ -50,15 +50,29 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', (_e, argv) => {
     for (const arg of argv.slice(1)) if (isProjectPath(arg)) openProjectPath(arg);
     if (mainWindow) {
+      // Elle peut être en vie sans être visible : c'est justement le cas où
+      // l'utilisateur relance l'application parce qu'il ne voit rien.
       if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
       mainWindow.focus();
     }
   });
 }
 
+// Dernier filet : une exception non rattrapée tuait l'application en silence.
+process.on('uncaughtException', (err) => {
+  logError('exception non rattrapée', err);
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    showStartupFailure(`CariPrompt n'a pas pu démarrer.\n${err?.message ?? String(err)}`);
+    app.quit();
+  }
+});
+
 // MARK: - Mise à jour
 
 const RELEASES_URL = 'https://github.com/CaribouNathan/CariPrompt/releases/latest';
+/** Liste complète des versions : c'est elle que le numéro de version ouvre */
+const RELEASES_PAGE = 'https://github.com/CaribouNathan/CariPrompt/releases';
 const LATEST_API = 'https://api.github.com/repos/CaribouNathan/CariPrompt/releases/latest';
 
 /** Compare deux versions « x.y.z » ; renvoie true si `a` est postérieure à `b` */
@@ -112,6 +126,21 @@ function logError(context: string, err: unknown) {
     /* journal indisponible */
   }
   console.error(line);
+}
+
+/**
+ * Dit à l'utilisateur que le démarrage a échoué, au lieu de ne rien faire.
+ *
+ * Une exception au démarrage laissait l'application sans fenêtre et sans
+ * message : de l'extérieur, un double-clic sans effet. Le journal se trouve
+ * dans le dossier de données de l'application, son chemin est rappelé ici.
+ */
+function showStartupFailure(detail: string): void {
+  try {
+    dialog.showErrorBox('CariPrompt', `${detail}\n\nJournal : ${dataFile('cariprompt.log')}`);
+  } catch {
+    /* même la boîte de dialogue peut manquer : le journal reste */
+  }
 }
 
 // MARK: - Projets .cariprompt
@@ -195,9 +224,18 @@ function applySpellchecker() {
   }
 }
 
+/**
+ * Couleurs des boutons de fenêtre incrustés (Windows).
+ *
+ * La couleur était transparente — huit chiffres hexadécimaux dont un canal
+ * alpha. Windows dessine ces boutons avec une couleur opaque ; une valeur
+ * translucide n'a pas de sens pour lui et peut faire échouer la création de la
+ * fenêtre. On lui donne le fond réel de l'application, ce qui revient au même
+ * à l'œil.
+ */
 function overlayColors() {
   const dark = nativeTheme.shouldUseDarkColors;
-  return { color: '#00000000', symbolColor: dark ? '#ffffff' : '#1d1d1f', height: 44 };
+  return { color: dark ? '#1e1e1e' : '#f5f5f7', symbolColor: dark ? '#ffffff' : '#1d1d1f', height: 44 };
 }
 
 // MARK: - Écrans
@@ -228,8 +266,8 @@ function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 820,
-    minWidth: 1140,
-    minHeight: 600,
+    minWidth: 980,
+    minHeight: 640,
     show: false,
     title: 'CariPrompt',
     icon: isMac ? undefined : ICON_PNG,
@@ -251,9 +289,34 @@ function createMainWindow() {
 
   applySpellchecker();
   mainWindow.loadFile(path.join(RENDERER_DIR, 'index.html'));
+  // La fenêtre n'était montrée qu'au premier rendu. Si ce rendu n'arrive
+  // jamais — pilote graphique d'une machine virtuelle, processus de rendu qui
+  // meurt — l'application restait un processus invisible, et le verrou
+  // d'instance unique empêchait ensuite tout nouveau lancement : double-clic
+  // sans effet, sans message. Passé ce délai, on montre la fenêtre telle
+  // qu'elle est ; mieux vaut une fenêtre vide qu'une absence inexplicable.
+  const filet = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      logError('ready-to-show', new Error('premier rendu absent après 8 s : fenêtre montrée telle quelle'));
+      mainWindow.show();
+    }
+  }, 8000);
   mainWindow.once('ready-to-show', () => {
+    clearTimeout(filet);
     buildMenu(); // réinstalle la barre de menus macOS une fois la fenêtre prête
     mainWindow?.show();
+  });
+
+  // Un rendu qui meurt ou une page qui ne charge pas laissaient l'application
+  // muette : on l'écrit dans le journal et on le dit.
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    logError('processus de rendu perdu', new Error(`${details.reason} (${details.exitCode})`));
+    showStartupFailure(`Le processus d'affichage s'est arrêté (${details.reason}).`);
+  });
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc) => {
+    if (code === -3) return; // navigation interrompue : sans conséquence
+    logError('chargement de la page', new Error(`${desc} (${code})`));
+    showStartupFailure(`L'interface n'a pas pu être chargée : ${desc}.`);
   });
   mainWindow.on('focus', () => {
     if (isMac && !Menu.getApplicationMenu()?.items.some((i) => i.label === t('prompter'))) buildMenu();
@@ -513,7 +576,7 @@ function macTemplate(): MenuItemConstructorOptions[] {
 }
 
 /** Menu du bouton ☰ (Windows / Linux) */
-function popupAppMenu(x: number, y: number) {
+function popupAppMenu(x: number, y: number, state: AppMenuState) {
   if (!mainWindow) return;
   const menu = Menu.buildFromTemplate([
     { label: t('file'), submenu: fileItems() },
@@ -522,6 +585,12 @@ function popupAppMenu(x: number, y: number) {
     appearanceMenu(),
     languageMenu(),
     { type: 'separator' },
+    {
+      label: t('updateAtLaunch'),
+      type: 'checkbox',
+      checked: state.updateCheck,
+      click: () => mainWindow?.webContents.send('menu', 'toggleUpdateCheck'),
+    },
     { label: t('aboutApp'), click: () => app.showAboutPanel() },
     { type: 'separator' },
     { label: t('quitApp'), accelerator: 'CmdOrCtrl+Q', registerAccelerator: false, click: () => mainWindow?.close() },
@@ -539,7 +608,7 @@ function registerIpc() {
   }));
 
   ipcMain.handle('prefs:get', (): Prefs => ({ ...prefs }));
-  ipcMain.on('menu:app', (_e, x: number, y: number) => popupAppMenu(x, y));
+  ipcMain.on('menu:app', (_e, x: number, y: number, state: AppMenuState) => popupAppMenu(x, y, state));
   ipcMain.handle('menu:choice', (_e, items: ChoiceItem[], x: number, y: number) => {
     if (!mainWindow) return null;
     return new Promise<string | null>((resolve) => {
@@ -665,7 +734,7 @@ function registerIpc() {
 
   ipcMain.handle('ai:keyStatus', () => keyStatus());
   // Liens de l'interface : seulement ceux, connus, que l'application affiche
-  const LINKS = new Set(['https://fr.wikipedia.org/wiki/Haute-Savoie', RELEASES_URL]);
+  const LINKS = new Set(['https://fr.wikipedia.org/wiki/Haute-Savoie', RELEASES_PAGE]);
   ipcMain.on('app:openLink', (_e, url: string) => {
     if (LINKS.has(url)) shell.openExternal(url).catch(() => undefined);
   });
@@ -788,7 +857,15 @@ app.whenReady().then(async () => {
   } catch (err) {
     logError('buildMenu', err);
   }
-  createMainWindow();
+  // Une exception ici — options de fenêtre refusées par le système, pilote
+  // graphique absent — ne doit pas laisser l'application sans rien à l'écran.
+  try {
+    createMainWindow();
+  } catch (err) {
+    logError('createMainWindow', err);
+    showStartupFailure(`La fenêtre n'a pas pu être créée.\n${(err as Error)?.message ?? String(err)}`);
+    app.quit();
+  }
 
   screen.on('display-added', broadcastDisplays);
   screen.on('display-removed', broadcastDisplays);
